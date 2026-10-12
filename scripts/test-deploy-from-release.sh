@@ -17,6 +17,9 @@ sum="$(sha256sum "$scratch/release/$asset")"; sum="${sum%% *}"
 cat > "$scratch/bin/gh" <<'GH'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${BLOCK_DOWNLOAD:-0}" == 1 ]]; then
+  echo 'unexpected download' > "$DOWNLOAD_MARKER"; exit 99
+fi
 [[ "$1 $2" == 'release download' ]]
 while (($#)); do
   if [[ "$1" == -D ]]; then dest="$2"; shift; fi
@@ -52,6 +55,35 @@ for mode in plain siblings missing corrupt; do
       if [[ "$mode" == missing ]]; then grep -q 'has no entry' "$scratch/log"; fi ;;
   esac
   echo "PASS: $mode"
+done
+
+# Consumer custody: valid local bytes work with the network downloader disabled.
+# A wrong digest, missing file or either half of the contract must never deploy.
+for mode in valid wrong-digest missing-file missing-digest missing-path; do
+  verified_path="$scratch/release/$asset"; verified_sum="$sum"
+  case "$mode" in
+    wrong-digest) verified_sum=$(printf '%064d' 0) ;;
+    missing-file) verified_path="$scratch/absent" ;;
+    missing-digest) verified_sum='' ;;
+    missing-path) verified_path='' ;;
+  esac
+  out="$scratch/local-$mode"; rc=0
+  env PATH="$scratch/bin:/usr/bin:/bin" BLOCK_DOWNLOAD=1 DOWNLOAD_MARKER="$scratch/downloaded" \
+    BOBBIN_VERIFIED_TARBALL="$verified_path" BOBBIN_VERIFIED_SHA256="$verified_sum" \
+    DEPLOY_HOST=serving.test DRY_RUN=1 DRY_RUN_OUT="$out" \
+    bash "$root/scripts/deploy-from-release.sh" v0.20.1 > "$scratch/log" 2>&1 || rc=$?
+  if [[ "$mode" == valid ]]; then
+    [[ "$rc" == 0 ]] && cmp -s "$out" "$scratch/payload/bobbin" || {
+      cat "$scratch/log"; echo 'FAIL: local verified control'; exit 1;
+    }
+  else
+    [[ "$rc" != 0 && ! -e "$out" ]] || {
+      cat "$scratch/log"; echo "FAIL: local $mode accepted"; exit 1;
+    }
+    grep -q 'REFUSED:' "$scratch/log"
+  fi
+  [[ ! -e "$scratch/downloaded" ]] || { echo 'FAIL: local handoff downloaded'; exit 1; }
+  echo "PASS: local $mode, no download"
 done
 
 # Cutover hand-off: the real script, beside a stub cutover, must pass the cutover's
