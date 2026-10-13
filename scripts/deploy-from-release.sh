@@ -35,6 +35,8 @@
 # Usage:  deploy-from-release.sh [<tag>]          (default: latest release)
 # Env:    DEPLOY_HOST (required, passed through), DRY_RUN=1 to stop after step 4,
 #         TARGET (default x86_64-unknown-linux-gnu), REQUIRE_KNOWLEDGE (see cutover).
+#         BOBBIN_VERIFIED_TARBALL + BOBBIN_VERIFIED_SHA256: consumer-verified local
+#         artifact; both required together, copied and hashed before extraction.
 set -euo pipefail
 
 TAG="${1:-}"
@@ -54,7 +56,18 @@ echo "==> release $TAG  (repo $REPO, target $TARGET)"
 tarball="bobbin-$TAG-$TARGET.tar.gz"
 
 # --- 1. fetch ---------------------------------------------------------------
-gh release download "$TAG" --repo "$REPO" -p "$tarball" -p 'SHA256SUMS.txt' -D "$work" --clobber
+# Consumer-owned provenance verification may supply the exact verified bytes.
+# bobbin-preverified-artifact/1
+if [ -n "${BOBBIN_VERIFIED_TARBALL:-}${BOBBIN_VERIFIED_SHA256:-}" ]; then
+  [[ "${BOBBIN_VERIFIED_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] &&
+    [ -f "${BOBBIN_VERIFIED_TARBALL:-}" ] || {
+      echo 'REFUSED: incomplete preverified artifact input' >&2; exit 1;
+    }
+  cp -- "$BOBBIN_VERIFIED_TARBALL" "$work/$tarball"
+  printf '%s  %s\n' "$BOBBIN_VERIFIED_SHA256" "$tarball" > "$work/SHA256SUMS.txt"
+else
+  gh release download "$TAG" --repo "$REPO" -p "$tarball" -p 'SHA256SUMS.txt' -D "$work" --clobber
+fi
 
 # --- 2. VERIFY — refuse anything the published checksums do not cover --------
 # `sha256sum -c` on a filtered list: a tarball absent from SHA256SUMS.txt yields an
