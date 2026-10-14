@@ -134,16 +134,21 @@ Caboodle installs these together and proves each one works; every tool also stan
 
 <!-- stack-table:start -->
 
+The Quipu stack is built around a governed, bitemporal knowledge store: shared
+facts, decisions and work history your agents can query. Quipu can check writes
+against your rules, records where each fact came from, and answers what was true
+when.
+
 | tool | what it gives your agents |
 |---|---|
-| [caboodle](https://github.com/scbrown/caboodle) | one wizard that installs the stack and proves it works |
-| [quipu](https://github.com/scbrown/quipu) | a knowledge graph that refuses facts that break its rules |
-| [camayoc](https://github.com/scbrown/camayoc) | the starter vocabulary, and how new knowledge earns its way in |
-| [bobbin](https://github.com/scbrown/bobbin) | search and context over your repositories, served over MCP |
-| [yupana](https://github.com/scbrown/yupana) | enforces your code policies and shows the blast radius before an edit |
-| [desire-path](https://github.com/scbrown/desire-path) | turns your agents' hallucinations into feature requests |
+| [caboodle](https://github.com/scbrown/caboodle) | 🧰 Agent Platform Toolkit - installs and configures the quipu stack |
+| [quipu](https://github.com/scbrown/quipu) | stores shared facts with provenance and history; can check writes against your rules |
+| [camayoc](https://github.com/scbrown/camayoc) | prepares knowledge and vocabulary for Quipu, with checks before it is admitted |
+| [bobbin](https://github.com/scbrown/bobbin) | searches your code and can include related knowledge from Quipu |
+| [yupana](https://github.com/scbrown/yupana) | shows code impact and can read policies from Quipu to check changes |
+| [desire-path](https://github.com/scbrown/desire-path) | turns agent mistakes into feature requests; works on its own without Quipu |
 | [seeds](https://github.com/scbrown/seeds) | a work item tracker backed by the Quipu knowledge base |
-| [shuttle](https://github.com/scbrown/shuttle) | the workflows your agents run, every step signed and kept in the graph |
+| [shuttle](https://github.com/scbrown/shuttle) | runs signed agent workflows and keeps their records in Quipu |
 
 <!-- stack-table:end -->
 
