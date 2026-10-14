@@ -8,6 +8,8 @@
   <a href="https://github.com/scbrown/caboodle"><img src="https://img.shields.io/badge/stack-quipu-8B5E3C.svg" alt="Quipu stack"/></a>
 </p>
 
+[Watch the 60-second context and native hook recording](docs/demos/injection-v0.27.3/README.md).
+
 **Bobbin gives developers and coding agents search and context over their
 repositories. Use its command line, Model Context Protocol (MCP) server, or
 agent hooks to find code by meaning, search exact words, and discover files
