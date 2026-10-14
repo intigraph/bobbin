@@ -1,0 +1,16 @@
+{
+  "format": "edited native terminal replay",
+  "duration_seconds": 60,
+  "capture_machine": "fresh Ubuntu24.04.5 LTS VM",
+  "claude_code": "2.1.287",
+  "tool_version": "0.27.3",
+  "invocation": "native Claude Code headless -p",
+  "simulated_callbacks": false,
+  "pacing_edited": true,
+  "release_sha": "dcbc9f67c4c87b988352bd162bba146e9273e840",
+  "release_archive_sha256": "931707956200f62e4b74dab64661ce2b2d8af4487318302f47f3bf7b133b0a0f",
+  "public_repository": "https://github.com/scbrown/desire-path",
+  "repository_sha": "090ec8862a866f02f825e8f44faaec3b334ee8c1",
+  "native_runtime_seconds": 22.771443,
+  "hook_event": "PostToolUse"
+}

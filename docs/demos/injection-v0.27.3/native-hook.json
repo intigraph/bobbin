@@ -1,0 +1,10 @@
+{
+  "hook_event": "PostToolUse",
+  "hook_name": "PostToolUse:Bash",
+  "context": [
+    "## Bobbin Semantic Matches\nYour search (`grep -rln \"analyze\\.Suggest\\|CategorizeDesire\\|ingest\\.Ingest\\|IngestFields\\|pave-correct\\|paveCorrect\" --include=*.go . | grep -v _test; grep -n \"func doIngest\" -A40 internal/cli/ingest.go | head -70`) also matched these files semantically:\n\n- `internal/ingest/ingest.go`\n- `internal/analyze/categorize.go`\n- `internal/cli/similar.go`\n- `docs/book/src/commands/index.md`\n\n## Related to What You Found\nYour search matched `internal/server/server.go`, `internal/cli/ingest.go`, `internal/cli/pave_correct.go`, `internal/ingest/ingest.go`, `internal/source/claudecode.go` \u2014 these co-change with them (from git history):\n\n- `internal/ingest/ingest_test.go` (coupling: 0.77)\n- `internal/source/claudecode_test.go` (coupling: 0.64)\n- `internal/cli/init_cmd.go` (coupling: 0.51)\n- `internal/model/model.go` (coupling: 0.45)\n- `internal/cli/init_test.go` (coupling: 0.45)\n"
+  ],
+  "hook_timestamp": "2026-10-14T07:28:44.113Z",
+  "next_assistant_timestamp": "2026-10-14T07:28:50.065Z",
+  "origin": "native Claude transcript attachment"
+}
