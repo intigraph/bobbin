@@ -21,6 +21,19 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.28.0](https://github.com/scbrown/bobbin/compare/v0.27.3...v0.28.0) (2026-10-14)
+
+
+### Features
+
+* **hooks:** discover saved breadcrumbs at session start ([#187](https://github.com/scbrown/bobbin/issues/187)) ([d7d6744](https://github.com/scbrown/bobbin/commit/d7d674486011a7240ddb535a3e1b7a168947daf6))
+
+
+### Bug Fixes
+
+* **beads:** expose metadata provenance and stale corpus warnings ([#185](https://github.com/scbrown/bobbin/issues/185)) ([c697b91](https://github.com/scbrown/bobbin/commit/c697b913821cb3b5f9aa1dc30d6a3fcdb2fed9e1))
+* **deploy:** consume an exact preverified release artifact ([#184](https://github.com/scbrown/bobbin/issues/184)) ([94bfc93](https://github.com/scbrown/bobbin/commit/94bfc9353d9d5f7a256e673c489aa691c3155b6a))
+
 ## [0.27.3](https://github.com/scbrown/bobbin/compare/v0.27.2...v0.27.3) (2026-10-09)
 
 
