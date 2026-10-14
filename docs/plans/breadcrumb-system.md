@@ -177,6 +177,13 @@ into the context so agents know what's available. Format:
 This is cheap (just names + descriptions, no search). Agents see breadcrumbs
 exist without having to run `bobbin bc list`.
 
+Implemented for both `hook prime-context` (startup) and `hook session-context`
+(compaction). Discovery reads the repository-local store, skips expired entries,
+and never recalls or rewrites them. It lists at most 29 entries; compaction
+reserves at most 30% of its line budget for the list. Missing, corrupt, or empty
+stores leave the ordinary primer/recovery output intact. Keyword triggers and
+context assembly on recall remain separate work below.
+
 ### Hook Integration (Keyword Triggers)
 
 **UserPromptSubmit** (line 545): After normal search, scan breadcrumb `keywords`
@@ -255,7 +262,7 @@ bobbin bc recall auth-refresh
 2. Integrate into UserPromptSubmit hook (scan prompt against keywords)
 3. Integrate into PostToolUse hook (scan tool_input against keywords)
 4. Budget splitting for mixed normal + breadcrumb results
-5. Add breadcrumb names to SessionStart hook output (discovery)
+5. Add breadcrumb names to SessionStart hook output (discovery; done for startup and compaction)
 6. Dedup integration
 7. Tests
 

@@ -12,6 +12,9 @@ use super::OutputConfig;
 use crate::config::Config;
 use crate::storage::{MetadataStore, VectorStore};
 
+#[path = "hook_breadcrumbs.rs"]
+mod breadcrumbs;
+
 /// Detect the git repo name from a directory by walking up to find `.git`.
 /// Returns the directory name containing `.git` (e.g. "aegis" for /home/user/gt/aegis/crew/ian/).
 fn detect_repo_name(dir: &Path) -> Option<String> {
@@ -4420,7 +4423,7 @@ async fn run_prime_context_inner() -> Result<()> {
     };
 
     // 5. Compose output
-    let context = format!(
+    let mut context = format!(
         "{}\n\n## Index Status\n{}\n\n## Available Commands\n\
         - `bobbin search <query>` — semantic + keyword hybrid search\n\
         - `bobbin context <query>` — task-aware context assembly with budget control\n\
@@ -4431,6 +4434,11 @@ async fn run_prime_context_inner() -> Result<()> {
         - `bobbin hotspots` — high-churn, high-complexity files",
         brief, stats_text,
     );
+    let discovery = breadcrumbs::discovery(&repo_root, 100);
+    if !discovery.is_empty() {
+        context.push_str("\n\n");
+        context.push_str(&discovery);
+    }
 
     // 6. Output hook response JSON
     let response = HookResponse {
@@ -6514,8 +6522,13 @@ async fn run_session_context_inner(args: SessionContextArgs) -> Result<()> {
     let recent_commits = git_recent_commits(&cwd, 5)?;
     let recently_changed_files = git_recently_changed_files(&cwd, 3)?;
 
-    // If there's nothing to report, exit silently
-    if modified_files.is_empty() && recent_commits.is_empty() && recently_changed_files.is_empty() {
+    let discovery = breadcrumbs::discovery(&find_bobbin_root(&cwd).unwrap_or(cwd.clone()), budget);
+    // If neither git nor breadcrumbs has context, exit silently.
+    if modified_files.is_empty()
+        && recent_commits.is_empty()
+        && recently_changed_files.is_empty()
+        && discovery.is_empty()
+    {
         return Ok(());
     }
 
@@ -6598,13 +6611,19 @@ async fn run_session_context_inner(args: SessionContextArgs) -> Result<()> {
     coupled_files.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
 
     // 7. Format compact markdown within budget
-    let context_md = format_session_context(
+    let mut context_md = format_session_context(
         &modified_files,
         &recent_commits,
         &file_symbols,
         &coupled_files,
-        budget,
+        budget.saturating_sub(discovery.lines().count() + usize::from(!discovery.is_empty())),
     );
+    if !discovery.is_empty() {
+        if !context_md.is_empty() {
+            context_md.push('\n');
+        }
+        context_md.push_str(&discovery);
+    }
 
     if context_md.is_empty() {
         return Ok(());
