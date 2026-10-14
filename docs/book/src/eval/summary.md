@@ -10,6 +10,22 @@ category: evaluation
 
 ## Overall Comparison
 
+> **What our eval says**
+>
+> This exploratory v1 study reports higher file-level F1 with Bobbin (71.9% vs.
+> 68.3%) and shorter average duration (3.6 vs. 4.2 minutes), but a lower test
+> pass rate (58.3% vs. 66.7%), higher average cost ($1.44 vs. $1.24), and more
+> input tokens. Finding the right files is a retrieval proxy; it does not mean
+> the agent solved the task. These results do not establish that Bobbin improves
+> task success or reduces cost.
+>
+> The arms have different run counts, the baseline is not fully model-matched,
+> and the study does not separate search-tool access from automatic injection.
+> The ablation arms have only 3–4 runs each. Treat this table as descriptive
+> evidence, not a causal comparison or proof that any ablation is better.
+> The [v2 preregistration](https://github.com/scbrown/bobbin/blob/main/eval/v2/PREREGISTRATION.md)
+> documents these limitations and the design intended to address them.
+
 | Metric | no-bobbin | with-bobbin | with-bobbin+blame_bridging=false | with-bobbin+coupling_depth=0 | with-bobbin+doc_demotion=0.0 | with-bobbin+gate_threshold=1.0 | with-bobbin+recency_weight=0.0 | with-bobbin+semantic_weight=0.0 |
 | ------ | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
 | Runs | 30 | 36 | 3 | 3 | 3 | 3 | 3 | 4 |
