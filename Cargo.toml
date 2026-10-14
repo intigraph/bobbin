@@ -2,7 +2,7 @@
 name = "bobbin-ai"
 # The package uses the unique crates.io suffix; the [[bin]] name below remains
 # `bobbin`, so user-facing commands and the project name do not change.
-version = "0.27.3"
+version = "0.28.0"
 edition = "2021"
 authors = ["Bobbin Team"]
 description = "Local-first context injection engine for AI coding agents"
