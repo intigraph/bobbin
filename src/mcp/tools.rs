@@ -786,9 +786,9 @@ pub struct SearchBeadsRequest {
     #[schemars(description = "Maximum number of results to return (default: 10)")]
     pub limit: Option<usize>,
 
-    /// Enrich results with live store data (default: true)
+    /// Reread configured-store metadata (default: true), with provenance.
     #[schemars(
-        description = "If true (default), enrich results with live status/priority/assignee read from the bead store itself. Set to false for faster indexed-only results."
+        description = "If true (default), reread status/priority/assignee from the configured source. JSONL is a snapshot, not live tracker state. Source/as-of limitations are reported; verify against the active tracker. Set to false for indexed-only results."
     )]
     pub enrich: Option<bool>,
 
@@ -804,6 +804,7 @@ pub struct SearchBeadsRequest {
 pub struct SearchBeadsResponse {
     pub query: String,
     pub count: usize,
+    pub warnings: Vec<String>,
     pub results: Vec<BeadResultItem>,
 }
 
@@ -811,6 +812,7 @@ pub struct SearchBeadsResponse {
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct BeadResultItem {
     pub bead_id: String,
+    pub metadata_provenance: crate::index::beads::provenance::BeadMetadataProvenance,
     pub title: String,
     pub priority: String,
     pub status: String,
