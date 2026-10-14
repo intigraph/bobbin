@@ -42,7 +42,7 @@ pub(crate) struct SearchBeadsParams {
     label: Option<String>,
     /// Max results (default 10)
     limit: Option<usize>,
-    /// Enrich with live bead-store data (default true)
+    /// Reread configured-store metadata (default true); not necessarily live.
     enrich: Option<bool>,
     /// Compact mode - omit snippet (default true)
     compact: Option<bool>,
@@ -52,12 +52,14 @@ pub(crate) struct SearchBeadsParams {
 pub(crate) struct SearchBeadsResponse {
     query: String,
     count: usize,
+    warnings: Vec<String>,
     results: Vec<BeadResultItem>,
 }
 
 #[derive(Serialize)]
 pub(crate) struct BeadResultItem {
     bead_id: String,
+    metadata_provenance: crate::index::beads::provenance::BeadMetadataProvenance,
     title: String,
     priority: String,
     status: String,
@@ -111,7 +113,7 @@ pub(crate) async fn search_beads(
         filtered.retain(|r| r.chunk.file_path.starts_with(&prefix));
     }
 
-    // Fetch live metadata from the bead store
+    // Reread configured-source metadata; exports remain snapshots.
     let live_metadata = if should_enrich && state.config.beads.enabled {
         let bead_ids: Vec<(String, String)> = filtered
             .iter()
@@ -257,6 +259,12 @@ pub(crate) async fn search_beads(
 
                 BeadResultItem {
                     bead_id: bead_id.to_string(),
+                    metadata_provenance:
+                        crate::index::beads::provenance::BeadMetadataProvenance::for_result(
+                            &state.config.beads,
+                            rig,
+                            true,
+                        ),
                     title: meta.title.clone(),
                     priority: format!("P{}", meta.priority),
                     status: meta.status.clone(),
@@ -283,6 +291,12 @@ pub(crate) async fn search_beads(
 
                 BeadResultItem {
                     bead_id: bead_id.to_string(),
+                    metadata_provenance:
+                        crate::index::beads::provenance::BeadMetadataProvenance::for_result(
+                            &state.config.beads,
+                            rig,
+                            false,
+                        ),
                     title: r.chunk.name.clone().unwrap_or_default(),
                     priority: extract_bead_field(content, "Priority: "),
                     status: extract_bead_field(content, "Status: "),
@@ -303,6 +317,7 @@ pub(crate) async fn search_beads(
     Ok(Json(SearchBeadsResponse {
         query: params.q,
         count: results.len(),
+        warnings: crate::index::beads::provenance::search_warnings(),
         results,
     }))
 }

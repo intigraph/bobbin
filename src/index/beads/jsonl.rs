@@ -197,11 +197,11 @@ pub(super) fn fetch_from_file(
     ))
 }
 
-/// Live metadata for named beads, read from the JSONL exports.
+/// Snapshot metadata for named beads, read from the JSONL exports.
 ///
 /// Unlike indexing, this runs per search. It streams each file once, admitting
 /// only the wanted ids by the cheap head check, so the cost is a scan rather
-/// than a full parse of the corpus.
+/// than a full parse of the corpus. Rereading does not prove board freshness.
 pub(super) fn fetch_bead_metadata(
     config: &BeadsConfig,
     bead_ids: &[(String, String)],

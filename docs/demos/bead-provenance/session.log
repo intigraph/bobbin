@@ -1,0 +1,28 @@
+Script started on 2026-10-10 16:59:28-04:00 [COMMAND="uv run --script docs/demos/bead-provenance/demo.py --before bobbin --after .task-notes/aegis-w9p/candidate" <not executed on terminal>]
+before: {
+  "count": 1,
+  "assignee": "former",
+  "status": "open",
+  "metadata_provenance": null,
+  "warnings": []
+}
+after: {
+  "count": 1,
+  "assignee": "former",
+  "status": "open",
+  "metadata_provenance": {
+    "as_of": null,
+    "current_board_verified": false,
+    "export_file_modified_at": null,
+    "observed_at": null,
+    "source": "unreported",
+    "warning": "Metadata source and as-of time are unreported. These fields may be stale indexed content or a retired-store snapshot; verify current state with the active tracker before routing work."
+  },
+  "warnings": [
+    "Bead discovery uses the last indexed corpus, not the current tracker. New or changed beads may be absent; zero results do not establish absence from the active board.",
+    "Metadata source and as-of time are unreported. These fields may be stale indexed content or a retired-store snapshot; verify current state with the active tracker before routing work."
+  ]
+}
+PASS: retained fields remain visible; candidate warns they are unverified.
+
+Script done on 2026-10-10 16:59:29-04:00 [COMMAND_EXIT_CODE="0"]

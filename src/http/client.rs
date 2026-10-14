@@ -367,31 +367,8 @@ pub struct PrimeLanguageStats {
     pub chunk_count: u64,
 }
 
-/// Response from the /beads endpoint
-#[derive(Deserialize)]
-pub struct SearchBeadsResponse {
-    pub query: String,
-    pub count: usize,
-    pub results: Vec<BeadResultItem>,
-}
-
-#[derive(Deserialize)]
-pub struct BeadResultItem {
-    pub bead_id: String,
-    pub title: String,
-    pub priority: String,
-    pub status: String,
-    pub issue_type: String,
-    pub assignee: String,
-    pub owner: String,
-    pub rig: String,
-    #[serde(default)]
-    pub labels: Vec<String>,
-    pub created_at: Option<String>,
-    pub relevance_score: f32,
-    pub match_type: String,
-    pub snippet: Option<String>,
-}
+mod beads;
+pub use beads::{BeadResultItem, SearchBeadsResponse};
 
 /// A feedback record from the server
 #[derive(Debug, Deserialize, serde::Serialize)]

@@ -242,7 +242,26 @@ Search for beads (issues/tasks) using natural language. Requires beads to be ind
 | `status` | string | no | all | Filter by status |
 | `assignee` | string | no | all | Filter by assignee |
 | `limit` | integer | no | 10 | Maximum results |
-| `enrich` | boolean | no | true | Enrich with live Dolt metadata |
+| `enrich` | boolean | no | true | Reread configured-source metadata; JSONL is an exported snapshot, not live tracker state |
+
+Every response includes `warnings`, including compact and empty responses.
+Every result includes `metadata_provenance`: `source`, `as_of`, `observed_at`,
+`export_file_modified_at`, `current_board_verified` and `warning`.
+`jsonl_snapshot` means an exported file was reread; it can still be retained
+from a retired tracker. `indexed_content` means no matching source metadata was
+available or enrichment was disabled. `configured_database` means that database
+was queried, which does not establish that it remains the active board.
+Older remote servers are marked `unreported` instead of silently claiming live
+enrichment.
+
+`as_of` is currently null: the sources do not provide a verified snapshot
+timestamp. `observed_at` records Bobbin's observation, while file modification
+time can change during a checkout without the underlying board advancing.
+Neither proves freshness. Verify status, priority and assignee with the active
+tracker before routing work. Discovery still uses the last indexed corpus;
+new beads can be absent and filters can exclude changed beads, so zero results
+are not proof of absence from the active board. This reports provenance; it
+does not migrate a tracker or repair an out-of-date index.
 
 ## dependencies
 

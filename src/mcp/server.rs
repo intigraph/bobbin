@@ -1945,9 +1945,9 @@ impl BobbinMcpServer {
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    /// Search indexed beads (issues) semantically, with optional live store enrichment
+    /// Search indexed beads with configured-source metadata and freshness warnings.
     #[tool(
-        description = "Search for beads (issues/tasks from the bead tracker) using natural language. Finds issues related to your query by semantic similarity. Filter by priority, status, assignee, rig, issue_type, or label. Results are enriched with live metadata from the bead store by default (set enrich=false for faster indexed-only results). Compact mode (default) omits snippets to save tokens. Requires beads to be indexed first via `bobbin index --include-beads`. NOTE: this searches the index built by the last reindex, not the store live — a bead created since then will not be found.",
+        description = "Search indexed beads using natural language, filtered by priority, status, assignee, rig, issue_type or label. Enrichment rereads the configured source; JSONL is an exported snapshot, not live tracker state. Results include metadata source, unknown as-of time and freshness warnings. Verify status/assignee with the active tracker before routing work. Compact mode omits snippets only. enrich=false uses indexed content. New beads since the last reindex may be absent; zero results do not prove absence from the current board.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -2000,7 +2000,7 @@ impl BobbinMcpServer {
             filtered.retain(|r| r.chunk.file_path.starts_with(&prefix));
         }
 
-        // Fetch live metadata from the bead store before filtering (so filters use fresh data)
+        // Reread configured-source metadata before filtering; exports remain snapshots.
         let live_metadata = if should_enrich && config.beads.enabled {
             let bead_ids: Vec<(String, String)> = filtered
                 .iter()
@@ -2123,81 +2123,13 @@ impl BobbinMcpServer {
         });
         filtered.truncate(limit);
 
-        // Convert to bead-specific response, using live metadata when available
-        let results: Vec<BeadResultItem> = filtered
-            .iter()
-            .map(|r| {
-                let parts: Vec<&str> = r.chunk.file_path.splitn(3, ':').collect();
-                let rig = if parts.len() >= 2 { parts[1] } else { "" };
-                let bead_id = if parts.len() == 3 {
-                    parts[2]
-                } else {
-                    &r.chunk.file_path
-                };
-
-                let match_type = r
-                    .match_type
-                    .as_ref()
-                    .map(|mt| format!("{:?}", mt).to_lowercase())
-                    .unwrap_or_else(|| "hybrid".to_string());
-
-                if let Some(meta) = live_metadata.get(bead_id) {
-                    let snippet = if compact {
-                        None
-                    } else {
-                        Some(clean_bead_snippet(&r.chunk.content, 200))
-                    };
-
-                    BeadResultItem {
-                        bead_id: bead_id.to_string(),
-                        title: meta.title.clone(),
-                        priority: format!("P{}", meta.priority),
-                        status: meta.status.clone(),
-                        issue_type: meta.issue_type.clone(),
-                        assignee: meta
-                            .assignee
-                            .clone()
-                            .unwrap_or_else(|| "unassigned".to_string()),
-                        owner: meta.owner.clone(),
-                        rig: rig.to_string(),
-                        labels: meta.labels.clone(),
-                        created_at: meta.created_at.clone(),
-                        relevance_score: r.score,
-                        match_type,
-                        snippet,
-                    }
-                } else {
-                    let content = &r.chunk.content;
-                    let snippet = if compact {
-                        None
-                    } else {
-                        Some(clean_bead_snippet(content, 200))
-                    };
-
-                    BeadResultItem {
-                        bead_id: bead_id.to_string(),
-                        title: r.chunk.name.clone().unwrap_or_default(),
-                        priority: extract_field(content, "Priority: "),
-                        status: extract_field(content, "Status: "),
-                        issue_type: "task".to_string(),
-                        assignee: extract_field(content, "Assignee: "),
-                        owner: String::new(),
-                        rig: rig.to_string(),
-                        labels: Vec::new(),
-                        created_at: None,
-                        relevance_score: r.score,
-                        match_type,
-                        snippet,
-                    }
-                }
-            })
-            .collect();
-
-        let response = SearchBeadsResponse {
-            query: req.query,
-            count: results.len(),
-            results,
-        };
+        let response = super::bead_response::build(
+            req.query,
+            &filtered,
+            &live_metadata,
+            &config.beads,
+            compact,
+        );
 
         let json = serde_json::to_string_pretty(&response)
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
@@ -3183,7 +3115,7 @@ fn extract_archive_date(path: &str) -> Option<String> {
 }
 
 /// Extract a field value from bead content like "Status: open | Priority: P2 | ..."
-fn extract_field(content: &str, prefix: &str) -> String {
+pub(super) fn extract_field(content: &str, prefix: &str) -> String {
     content
         .lines()
         .find(|line| line.contains(prefix))
@@ -3198,7 +3130,7 @@ fn extract_field(content: &str, prefix: &str) -> String {
 
 /// Clean a bead snippet by removing metadata lines that are already in structured fields.
 /// Returns the description/content portion only, truncated to max_len.
-fn clean_bead_snippet(content: &str, max_len: usize) -> String {
+pub(super) fn clean_bead_snippet(content: &str, max_len: usize) -> String {
     let cleaned: String = content
         .lines()
         .filter(|line| {

@@ -34,6 +34,8 @@ pub(super) struct RemoteBackend {
     role: String,
 }
 
+#[cfg(test)]
+mod beads_tests;
 /// Accumulates query parameters, skipping absent ones.
 mod params;
 #[cfg(test)]
@@ -213,7 +215,14 @@ impl RemoteBackend {
         req: &SearchBeadsRequest,
     ) -> Result<CallToolResult, McpError> {
         let p = search_beads_params(req);
-        self.get("search_beads", "/beads", p).await
+        let value = self
+            .client
+            .get_value("/beads", &p.into_vec())
+            .await
+            .map_err(|e| self.fail("search_beads", e))?;
+        let value = crate::index::beads::provenance::annotate_remote(value)
+            .map_err(|e| self.fail("search_beads", e))?;
+        Self::ok(value)
     }
 
     pub(super) async fn archive_search(

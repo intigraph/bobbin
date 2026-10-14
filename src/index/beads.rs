@@ -126,6 +126,7 @@ struct CommentRow {
 mod dolt;
 mod jsonl;
 mod keys;
+pub mod provenance;
 pub(crate) use keys::issues_where_clause;
 pub use keys::{bead_file_path, bead_file_paths, rig_of};
 
@@ -309,11 +310,11 @@ async fn fetch_from_source(
     }
 }
 
-/// Fetch live metadata for specific beads from the configured store.
+/// Fetch metadata for specific beads from the configured source.
 ///
 /// Takes a list of (rig, bead_id) pairs and returns a map from bead_id to
-/// metadata. Used by the `search_beads` MCP tool to enrich results with
-/// current status/priority — the half that made the aegis-205llh failure so
+/// metadata. A JSONL reread is still a snapshot; it is not current-board proof.
+/// Used by bead search with explicit provenance — the half that made the failure so
 /// hard to see, because it kept reporting *confident* metadata from the wrong
 /// store rather than failing.
 pub async fn fetch_bead_metadata(
