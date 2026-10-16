@@ -1,0 +1,331 @@
+task_id,arm,budget,outcome,injected_lines,injected_tokens,gold_files,gold_hunks,gold_lines,file_recall,hunk_recall,file_precision,density,detail
+cargo-001,full,100,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-semantic,100,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-coupling,100,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-blame,100,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-recency,100,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-docdemote,100,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-gate,100,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,rg,100,injected,100,1082,1,2,7,0.0,0.0,0.0,0.0,
+cargo-001,bm25,100,injected,100,1230,1,2,7,1.0,1.0,0.5,0.07,
+cargo-001,embed,100,injected,100,619,1,2,7,0.0,0.0,0.0,0.0,
+cargo-001,repomap,100,injected,100,384,1,2,7,0.0,0.0,0.0,0.0,
+cargo-001,full,300,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-semantic,300,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-coupling,300,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-blame,300,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-recency,300,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-docdemote,300,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-gate,300,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,rg,300,injected,300,3845,1,2,7,0.0,0.0,0.0,0.0,
+cargo-001,bm25,300,injected,300,3201,1,2,7,1.0,1.0,0.16666666666666666,0.023333333333333334,
+cargo-001,embed,300,injected,185,1181,1,2,7,0.0,0.0,0.0,0.0,
+cargo-001,repomap,300,injected,300,1153,1,2,7,0.0,0.0,0.0,0.0,
+cargo-001,full,600,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-semantic,600,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-coupling,600,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-blame,600,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-recency,600,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-docdemote,600,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,-gate,600,skipped,0,0,1,2,7,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-001,rg,600,injected,600,7704,1,2,7,0.0,0.0,0.0,0.0,
+cargo-001,bm25,600,injected,600,6333,1,2,7,1.0,1.0,0.1111111111111111,0.011666666666666667,
+cargo-001,embed,600,injected,185,1181,1,2,7,0.0,0.0,0.0,0.0,
+cargo-001,repomap,600,injected,600,3505,1,2,7,0.0,0.0,0.0,0.0,
+cargo-002,full,100,injected,78,833,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-semantic,100,injected,78,833,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-coupling,100,injected,78,838,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-blame,100,injected,78,833,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-recency,100,injected,78,833,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-docdemote,100,injected,78,833,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-gate,100,injected,78,833,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,rg,100,injected,100,1146,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,bm25,100,injected,100,619,1,4,10,1.0,0.75,0.3333333333333333,0.09,
+cargo-002,embed,100,injected,100,781,1,4,10,1.0,0.75,0.5,0.09,
+cargo-002,repomap,100,injected,100,384,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,full,300,injected,109,985,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-semantic,300,injected,192,1653,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-coupling,300,injected,109,994,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-blame,300,injected,109,985,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-recency,300,injected,109,985,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-docdemote,300,injected,109,985,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-gate,300,injected,109,985,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,rg,300,injected,300,3972,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,bm25,300,injected,300,2309,1,4,10,1.0,0.75,0.14285714285714285,0.03,
+cargo-002,embed,300,injected,268,2470,1,4,10,1.0,0.75,0.3333333333333333,0.033582089552238806,
+cargo-002,repomap,300,injected,300,1151,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,full,600,injected,101,986,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-semantic,600,injected,226,2237,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-coupling,600,injected,101,988,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-blame,600,injected,101,986,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-recency,600,injected,101,986,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-docdemote,600,injected,101,986,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,-gate,600,injected,101,986,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,rg,600,injected,600,8014,1,4,10,0.0,0.0,0.0,0.0,
+cargo-002,bm25,600,injected,600,4737,1,4,10,1.0,0.75,0.1111111111111111,0.015,
+cargo-002,embed,600,injected,268,2470,1,4,10,1.0,0.75,0.3333333333333333,0.033582089552238806,
+cargo-002,repomap,600,injected,600,3501,1,4,10,0.0,0.0,0.0,0.0,
+cargo-003,full,100,injected,76,591,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-semantic,100,injected,81,689,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-coupling,100,injected,76,599,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-blame,100,injected,76,591,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-recency,100,injected,76,591,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-docdemote,100,injected,76,591,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-gate,100,injected,76,591,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,rg,100,injected,100,785,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,bm25,100,injected,100,794,1,4,4,1.0,0.0,0.3333333333333333,0.0,
+cargo-003,embed,100,injected,100,606,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,repomap,100,injected,100,867,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,full,300,injected,171,1539,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-semantic,300,injected,199,1790,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-coupling,300,injected,171,1558,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-blame,300,injected,171,1539,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-recency,300,injected,171,1539,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-docdemote,300,injected,171,1539,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-gate,300,injected,171,1539,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,rg,300,injected,300,2230,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,bm25,300,injected,300,2630,1,4,4,1.0,0.0,0.16666666666666666,0.0,
+cargo-003,embed,300,injected,300,1907,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,repomap,300,injected,300,2723,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,full,600,skipped,0,0,1,4,4,0.0,0.0,,,"bobbin: skipped (all 12 chunks previously injected, no complementary files)"
+cargo-003,-semantic,600,injected,128,1559,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,-coupling,600,skipped,0,0,1,4,4,0.0,0.0,,,"bobbin: skipped (all 12 chunks previously injected, no complementary files)"
+cargo-003,-blame,600,skipped,0,0,1,4,4,0.0,0.0,,,"bobbin: skipped (all 12 chunks previously injected, no complementary files)"
+cargo-003,-recency,600,skipped,0,0,1,4,4,0.0,0.0,,,"bobbin: skipped (all 12 chunks previously injected, no complementary files)"
+cargo-003,-docdemote,600,skipped,0,0,1,4,4,0.0,0.0,,,"bobbin: skipped (all 12 chunks previously injected, no complementary files)"
+cargo-003,-gate,600,skipped,0,0,1,4,4,0.0,0.0,,,"bobbin: skipped (all 12 chunks previously injected, no complementary files)"
+cargo-003,rg,600,injected,600,4608,1,4,4,0.0,0.0,0.0,0.0,
+cargo-003,bm25,600,injected,600,5680,1,4,4,1.0,0.25,0.1,0.0016666666666666668,
+cargo-003,embed,600,injected,600,4024,1,4,4,1.0,0.0,0.07142857142857142,0.0,
+cargo-003,repomap,600,injected,600,3978,1,4,4,0.0,0.0,0.0,0.0,
+cargo-004,full,100,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-semantic,100,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-coupling,100,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-blame,100,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-recency,100,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-docdemote,100,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-gate,100,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,rg,100,injected,100,1154,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,bm25,100,injected,100,692,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,embed,100,injected,99,616,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,repomap,100,injected,100,384,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,full,300,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-semantic,300,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-coupling,300,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-blame,300,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-recency,300,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-docdemote,300,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-gate,300,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,rg,300,injected,300,3733,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,bm25,300,injected,300,2332,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,embed,300,injected,292,2166,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,repomap,300,injected,300,1151,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,full,600,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-semantic,600,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-coupling,600,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-blame,600,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-recency,600,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-docdemote,600,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,-gate,600,skipped,0,0,1,1,9,0.0,0.0,,,bobbin: skipped (operational intent: Operational)
+cargo-004,rg,600,injected,600,7626,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,bm25,600,injected,600,5227,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,embed,600,injected,302,2215,1,1,9,0.0,0.0,0.0,0.0,
+cargo-004,repomap,600,injected,600,3535,1,1,9,0.0,0.0,0.0,0.0,
+cargo-005,full,100,injected,75,715,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-semantic,100,injected,87,812,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-coupling,100,injected,75,723,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-blame,100,injected,75,715,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-recency,100,injected,75,715,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-docdemote,100,injected,59,573,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-gate,100,injected,75,715,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,rg,100,injected,100,911,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,bm25,100,injected,100,763,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,embed,100,injected,100,832,1,1,1,1.0,0.0,0.3333333333333333,0.0,
+cargo-005,repomap,100,injected,100,925,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,full,300,injected,120,1107,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-semantic,300,injected,170,1462,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-coupling,300,injected,120,1118,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-blame,300,injected,120,1107,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-recency,300,injected,120,1107,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-docdemote,300,injected,154,1378,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-gate,300,injected,120,1107,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,rg,300,injected,300,2382,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,bm25,300,injected,300,2356,1,1,1,1.0,0.0,0.2,0.0,
+cargo-005,embed,300,injected,300,2605,1,1,1,1.0,0.0,0.25,0.0,
+cargo-005,repomap,300,injected,300,1865,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,full,600,injected,275,2469,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-semantic,600,injected,116,991,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-coupling,600,injected,275,2472,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-blame,600,injected,275,2469,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-recency,600,injected,275,2469,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-docdemote,600,injected,275,2464,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,-gate,600,injected,275,2469,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,rg,600,injected,600,4423,1,1,1,0.0,0.0,0.0,0.0,
+cargo-005,bm25,600,injected,600,4974,1,1,1,1.0,0.0,0.125,0.0,
+cargo-005,embed,600,injected,584,5115,1,1,1,1.0,0.0,0.16666666666666666,0.0,
+cargo-005,repomap,600,injected,600,3495,1,1,1,0.0,0.0,0.0,0.0,
+django-001,full,100,error,0,30,1,8,9,0.0,0.0,,,injected text had no parseable chunk headers
+django-001,-semantic,100,error,0,30,1,8,9,0.0,0.0,,,injected text had no parseable chunk headers
+django-001,-coupling,100,error,0,30,1,8,9,0.0,0.0,,,injected text had no parseable chunk headers
+django-001,-blame,100,error,0,30,1,8,9,0.0,0.0,,,injected text had no parseable chunk headers
+django-001,-recency,100,error,0,30,1,8,9,0.0,0.0,,,injected text had no parseable chunk headers
+django-001,-docdemote,100,error,0,30,1,8,9,0.0,0.0,,,injected text had no parseable chunk headers
+django-001,-gate,100,error,0,30,1,8,9,0.0,0.0,,,injected text had no parseable chunk headers
+django-001,rg,100,injected,100,716,1,8,9,0.0,0.0,0.0,0.0,
+django-001,bm25,100,injected,100,989,1,8,9,1.0,0.125,0.5,0.01,
+django-001,embed,100,injected,86,861,1,8,9,0.0,0.0,0.0,0.0,
+django-001,repomap,100,injected,100,1286,1,8,9,0.0,0.0,0.0,0.0,
+django-001,full,300,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,-semantic,300,injected,49,617,1,8,9,0.0,0.0,0.0,0.0,
+django-001,-coupling,300,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,-blame,300,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,-recency,300,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,-docdemote,300,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,-gate,300,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,rg,300,injected,300,2286,1,8,9,0.0,0.0,0.0,0.0,
+django-001,bm25,300,injected,300,2879,1,8,9,1.0,0.375,0.3333333333333333,0.01,
+django-001,embed,300,injected,278,2743,1,8,9,1.0,0.0,0.3333333333333333,0.0,
+django-001,repomap,300,injected,300,3728,1,8,9,0.0,0.0,0.0,0.0,
+django-001,full,600,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,-semantic,600,injected,208,2193,1,8,9,0.0,0.0,0.0,0.0,
+django-001,-coupling,600,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,-blame,600,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,-recency,600,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,-docdemote,600,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,-gate,600,skipped,0,0,1,8,9,0.0,0.0,,,"bobbin: skipped (all 2 chunks previously injected, no complementary files)"
+django-001,rg,600,injected,600,4816,1,8,9,0.0,0.0,0.0,0.0,
+django-001,bm25,600,injected,600,5408,1,8,9,1.0,0.375,0.14285714285714285,0.005,
+django-001,embed,600,injected,433,4778,1,8,9,1.0,0.125,0.125,0.0023094688221709007,
+django-001,repomap,600,injected,600,7309,1,8,9,0.0,0.0,0.0,0.0,
+django-002,full,100,injected,37,478,2,4,4,0.0,0.0,0.0,0.0,
+django-002,-semantic,100,injected,57,586,2,4,4,0.0,0.0,0.0,0.0,
+django-002,-coupling,100,injected,37,486,2,4,4,0.0,0.0,0.0,0.0,
+django-002,-blame,100,injected,37,478,2,4,4,0.0,0.0,0.0,0.0,
+django-002,-recency,100,injected,37,478,2,4,4,0.0,0.0,0.0,0.0,
+django-002,-docdemote,100,injected,37,478,2,4,4,0.0,0.0,0.0,0.0,
+django-002,-gate,100,injected,37,478,2,4,4,0.0,0.0,0.0,0.0,
+django-002,rg,100,injected,100,766,2,4,4,0.0,0.0,0.0,0.0,
+django-002,bm25,100,injected,100,828,2,4,4,0.0,0.0,0.0,0.0,
+django-002,embed,100,injected,100,983,2,4,4,0.5,0.75,0.25,0.03,
+django-002,repomap,100,injected,100,1201,2,4,4,0.0,0.0,0.0,0.0,
+django-002,full,300,error,0,61,2,4,4,0.0,0.0,,,injected text had no parseable chunk headers
+django-002,-semantic,300,injected,78,751,2,4,4,0.0,0.0,0.0,0.0,
+django-002,-coupling,300,skipped,0,0,2,4,4,0.0,0.0,,,"bobbin: skipped (all 3 chunks previously injected, no complementary files)"
+django-002,-blame,300,error,0,61,2,4,4,0.0,0.0,,,injected text had no parseable chunk headers
+django-002,-recency,300,error,0,61,2,4,4,0.0,0.0,,,injected text had no parseable chunk headers
+django-002,-docdemote,300,error,0,61,2,4,4,0.0,0.0,,,injected text had no parseable chunk headers
+django-002,-gate,300,error,0,61,2,4,4,0.0,0.0,,,injected text had no parseable chunk headers
+django-002,rg,300,injected,300,2292,2,4,4,0.0,0.0,0.0,0.0,
+django-002,bm25,300,injected,300,2460,2,4,4,0.5,0.25,0.2,0.0033333333333333335,
+django-002,embed,300,injected,164,1652,2,4,4,0.5,0.75,0.25,0.018292682926829267,
+django-002,repomap,300,injected,300,3280,2,4,4,0.0,0.0,0.0,0.0,
+django-002,full,600,error,0,75,2,4,4,0.0,0.0,,,injected text had no parseable chunk headers
+django-002,-semantic,600,injected,182,1869,2,4,4,0.0,0.0,0.0,0.0,
+django-002,-coupling,600,skipped,0,0,2,4,4,0.0,0.0,,,"bobbin: skipped (all 3 chunks previously injected, no complementary files)"
+django-002,-blame,600,error,0,75,2,4,4,0.0,0.0,,,injected text had no parseable chunk headers
+django-002,-recency,600,error,0,75,2,4,4,0.0,0.0,,,injected text had no parseable chunk headers
+django-002,-docdemote,600,error,0,75,2,4,4,0.0,0.0,,,injected text had no parseable chunk headers
+django-002,-gate,600,error,0,75,2,4,4,0.0,0.0,,,injected text had no parseable chunk headers
+django-002,rg,600,injected,600,4352,2,4,4,0.0,0.0,0.0,0.0,
+django-002,bm25,600,injected,600,5366,2,4,4,0.5,0.75,0.125,0.005,
+django-002,embed,600,injected,164,1652,2,4,4,0.5,0.75,0.25,0.018292682926829267,
+django-002,repomap,600,injected,600,6482,2,4,4,0.0,0.0,0.0,0.0,
+django-003,full,100,injected,73,1186,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-semantic,100,injected,82,842,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-coupling,100,injected,73,1203,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-blame,100,injected,73,1186,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-recency,100,injected,73,1186,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-docdemote,100,injected,73,1186,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-gate,100,injected,73,1186,2,5,5,0.0,0.0,0.0,0.0,
+django-003,rg,100,injected,100,980,2,5,5,0.0,0.0,0.0,0.0,
+django-003,bm25,100,injected,100,997,2,5,5,0.5,0.0,0.5,0.0,
+django-003,embed,100,injected,98,1212,2,5,5,0.5,0.0,0.2,0.0,
+django-003,repomap,100,injected,100,883,2,5,5,0.0,0.0,0.0,0.0,
+django-003,full,300,injected,75,927,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-semantic,300,injected,166,2017,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-coupling,300,injected,75,935,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-blame,300,injected,75,927,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-recency,300,injected,75,927,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-docdemote,300,injected,75,927,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-gate,300,injected,75,927,2,5,5,0.0,0.0,0.0,0.0,
+django-003,rg,300,injected,300,2791,2,5,5,0.0,0.0,0.0,0.0,
+django-003,bm25,300,injected,300,3016,2,5,5,0.5,0.0,0.3333333333333333,0.0,
+django-003,embed,300,injected,291,3270,2,5,5,0.5,0.2,0.16666666666666666,0.003436426116838488,
+django-003,repomap,300,injected,300,2919,2,5,5,0.0,0.0,0.0,0.0,
+django-003,full,600,error,0,89,2,5,5,0.0,0.0,,,injected text had no parseable chunk headers
+django-003,-semantic,600,injected,188,2062,2,5,5,0.0,0.0,0.0,0.0,
+django-003,-coupling,600,skipped,0,0,2,5,5,0.0,0.0,,,"bobbin: skipped (all 10 chunks previously injected, no complementary files)"
+django-003,-blame,600,error,0,89,2,5,5,0.0,0.0,,,injected text had no parseable chunk headers
+django-003,-recency,600,error,0,89,2,5,5,0.0,0.0,,,injected text had no parseable chunk headers
+django-003,-docdemote,600,error,0,89,2,5,5,0.0,0.0,,,injected text had no parseable chunk headers
+django-003,-gate,600,error,0,89,2,5,5,0.0,0.0,,,injected text had no parseable chunk headers
+django-003,rg,600,injected,600,5832,2,5,5,0.0,0.0,0.0,0.0,
+django-003,bm25,600,injected,600,5943,2,5,5,0.5,0.0,0.16666666666666666,0.0,
+django-003,embed,600,injected,439,5249,2,5,5,0.5,0.2,0.125,0.002277904328018223,
+django-003,repomap,600,injected,600,6334,2,5,5,0.0,0.0,0.0,0.0,
+django-004,full,100,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-semantic,100,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-coupling,100,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-blame,100,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-recency,100,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-docdemote,100,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-gate,100,error,0,30,2,6,6,0.0,0.0,,,injected text had no parseable chunk headers
+django-004,rg,100,injected,100,969,2,6,6,0.0,0.0,0.0,0.0,
+django-004,bm25,100,injected,100,1018,2,6,6,0.0,0.0,0.0,0.0,
+django-004,embed,100,injected,91,1046,2,6,6,0.0,0.0,0.0,0.0,
+django-004,repomap,100,injected,100,883,2,6,6,0.0,0.0,0.0,0.0,
+django-004,full,300,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-semantic,300,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-coupling,300,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-blame,300,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-recency,300,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-docdemote,300,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-gate,300,injected,84,788,2,6,6,0.0,0.0,0.0,0.0,
+django-004,rg,300,injected,300,2799,2,6,6,0.0,0.0,0.0,0.0,
+django-004,bm25,300,injected,300,3116,2,6,6,0.0,0.0,0.0,0.0,
+django-004,embed,300,injected,274,3137,2,6,6,0.5,0.16666666666666666,0.1111111111111111,0.0036496350364963502,
+django-004,repomap,300,injected,300,2919,2,6,6,0.0,0.0,0.0,0.0,
+django-004,full,600,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-semantic,600,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-coupling,600,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-blame,600,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-recency,600,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-docdemote,600,skipped,0,0,2,6,6,0.0,0.0,,,bobbin: skipped (semantic=0.00 < gate=0.45)
+django-004,-gate,600,injected,281,2765,2,6,6,0.0,0.0,0.0,0.0,
+django-004,rg,600,injected,600,5782,2,6,6,0.0,0.0,0.0,0.0,
+django-004,bm25,600,injected,600,6004,2,6,6,0.0,0.0,0.0,0.0,
+django-004,embed,600,injected,274,3137,2,6,6,0.5,0.16666666666666666,0.1111111111111111,0.0036496350364963502,
+django-004,repomap,600,injected,600,5805,2,6,6,0.0,0.0,0.0,0.0,
+django-005,full,100,injected,58,682,3,11,20,0.0,0.0,0.0,0.0,
+django-005,-semantic,100,injected,80,788,3,11,20,0.0,0.0,0.0,0.0,
+django-005,-coupling,100,injected,58,699,3,11,20,0.0,0.0,0.0,0.0,
+django-005,-blame,100,injected,58,682,3,11,20,0.0,0.0,0.0,0.0,
+django-005,-recency,100,injected,58,682,3,11,20,0.0,0.0,0.0,0.0,
+django-005,-docdemote,100,injected,58,682,3,11,20,0.0,0.0,0.0,0.0,
+django-005,-gate,100,injected,58,682,3,11,20,0.0,0.0,0.0,0.0,
+django-005,rg,100,injected,100,804,3,11,20,0.0,0.0,0.0,0.0,
+django-005,bm25,100,injected,100,854,3,11,20,0.3333333333333333,0.2727272727272727,0.5,0.04,
+django-005,embed,100,injected,93,920,3,11,20,0.3333333333333333,0.2727272727272727,0.5,0.043010752688172046,
+django-005,repomap,100,injected,100,1201,3,11,20,0.0,0.0,0.0,0.0,
+django-005,full,300,error,0,108,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,-semantic,300,injected,185,1974,3,11,20,0.0,0.0,0.0,0.0,
+django-005,-coupling,300,skipped,0,0,3,11,20,0.0,0.0,,,"bobbin: skipped (all 8 chunks previously injected, no complementary files)"
+django-005,-blame,300,error,0,108,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,-recency,300,error,0,108,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,-docdemote,300,error,0,108,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,-gate,300,error,0,108,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,rg,300,injected,300,3393,3,11,20,0.0,0.0,0.0,0.0,
+django-005,bm25,300,injected,300,2660,3,11,20,0.6666666666666666,0.6363636363636364,0.5,0.05333333333333334,
+django-005,embed,300,injected,245,2823,3,11,20,0.3333333333333333,0.2727272727272727,0.25,0.0163265306122449,
+django-005,repomap,300,injected,300,3260,3,11,20,0.0,0.0,0.0,0.0,
+django-005,full,600,error,0,112,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,-semantic,600,error,0,112,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,-coupling,600,skipped,0,0,3,11,20,0.0,0.0,,,"bobbin: skipped (all 8 chunks previously injected, no complementary files)"
+django-005,-blame,600,error,0,112,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,-recency,600,error,0,112,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,-docdemote,600,error,0,112,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,-gate,600,error,0,112,3,11,20,0.0,0.0,,,injected text had no parseable chunk headers
+django-005,rg,600,injected,600,6712,3,11,20,0.0,0.0,0.0,0.0,
+django-005,bm25,600,injected,600,5585,3,11,20,0.6666666666666666,0.9090909090909091,0.2857142857142857,0.03166666666666667,
+django-005,embed,600,injected,522,5806,3,11,20,0.3333333333333333,0.2727272727272727,0.09090909090909091,0.007662835249042145,
+django-005,repomap,600,injected,600,6458,3,11,20,0.0,0.0,0.0,0.0,
