@@ -28,7 +28,7 @@ src/cli/calibrate.rs 2105
 src/cli/feedback.rs 535
 src/cli/grep.rs 651
 src/cli/hook.rs 9476
-src/cli/index.rs 1757
+src/cli/index.rs 1681
 src/cli/run.rs 746
 src/cli/search.rs 751
 src/cli/status.rs 629

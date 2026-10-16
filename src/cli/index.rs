@@ -15,11 +15,14 @@ use std::time::Instant;
 use super::OutputConfig;
 use crate::config::{Config, ContextualEmbeddingConfig};
 use crate::index::{beads, embedder, resolver, Embedder, Parser};
-use crate::storage::{LockWait, MaintenanceOutcome, MetadataStore, VectorStore};
+use crate::storage::{MetadataStore, VectorStore};
 use crate::types::{Chunk, ImportDependency, ImportEdge};
 
 mod args;
 pub use args::IndexArgs;
+mod maintenance;
+pub use maintenance::MaintenanceMode;
+use maintenance::{maintenance_lock_wait, Decision, MaintenanceReport};
 #[cfg(feature = "knowledge")]
 mod graph_push;
 mod profile;
@@ -36,85 +39,6 @@ pub(crate) const BEADS_HASH_REPO: &str = "beads-issues";
 /// sources, not files of any one source repo), so its rows and hash
 /// bookkeeping must not collide with per-repo incremental state.
 const ARCHIVE_HASH_REPO: &str = "archive-records";
-
-/// How long the reindex waits for the store-wide maintenance lock before giving
-/// up.
-///
-/// Sized against the CONTENDER, not against comfort: with the read path
-/// throttled store-wide, the only thing that can hold this lock is one
-/// opportunistic, memory-bounded compaction — not another full sweep. It is
-/// also multiplied by the number of repos, because the nightly runs one `index`
-/// per repo (27 here), so a "generous" budget is really 27x that in the
-/// pathological case. Two minutes is long enough to outlast a bounded
-/// compaction and short enough that a genuinely stuck lock costs a bounded
-/// amount of nightly — and every expiry now says so out loud.
-const DEFAULT_MAINTENANCE_LOCK_WAIT_SECS: u64 = 120;
-
-/// Environment override for [`DEFAULT_MAINTENANCE_LOCK_WAIT_SECS`], so a host
-/// whose reindex unit has a tighter `TimeoutStartSec` can shorten the wait
-/// without a rebuild. `0` restores the old skip-on-contention behaviour.
-const MAINTENANCE_LOCK_WAIT_ENV: &str = "BOBBIN_MAINTENANCE_LOCK_WAIT_SECS";
-
-fn maintenance_lock_wait() -> LockWait {
-    let secs = std::env::var(MAINTENANCE_LOCK_WAIT_ENV)
-        .ok()
-        .and_then(|v| v.trim().parse::<u64>().ok())
-        .unwrap_or(DEFAULT_MAINTENANCE_LOCK_WAIT_SECS);
-    if secs == 0 {
-        LockWait::NoWait
-    } else {
-        LockWait::UpTo(std::time::Duration::from_secs(secs))
-    }
-}
-
-/// What the maintenance step of a reindex actually did, so the run can say so.
-///
-/// The interesting state is `SkippedLockHeld` — maintenance that did nothing
-/// while the command still exits 0. That was previously indistinguishable from
-/// a sweep that reclaimed gigabytes, and the difference went unnoticed for
-/// months because nothing could report it.
-#[derive(Debug)]
-struct MaintenanceReport {
-    outcome: MaintenanceOutcome,
-}
-
-impl MaintenanceReport {
-    /// Turn a completed maintenance call into its operator-facing report.
-    ///
-    /// A real maintenance error must fail the index command. Swallowing it here
-    /// made systemd report success while every scheduled run failed compaction.
-    /// Lock contention is different: it is represented explicitly by
-    /// `SkippedLockHeld` and remains a reportable, non-error outcome.
-    fn from_result(r: anyhow::Result<MaintenanceOutcome>) -> anyhow::Result<Self> {
-        Ok(Self {
-            outcome: r.context("Lance maintenance failed")?,
-        })
-    }
-
-    /// Print an unmissable stderr warning when the sweep was starved.
-    ///
-    /// stderr and not stdout, and unconditional: `--json` and `--quiet` are the
-    /// modes the scheduled reindex actually runs in, and those are exactly the
-    /// runs where a silent skip went unnoticed for months.
-    fn warn_if_starved(&self) {
-        let MaintenanceOutcome::SkippedLockHeld { waited } = self.outcome else {
-            return;
-        };
-        let waited = waited.as_secs();
-        eprintln!(
-            "warning: MAINTENANCE SKIPPED — another process held the store maintenance \
-             lock for the whole {waited}s wait. Nothing was pruned or compacted by this \
-             run; the store did not shrink. Set {MAINTENANCE_LOCK_WAIT_ENV} higher, or \
-             find the contender (fuser .maintenance.lock in the lance dir)."
-        );
-    }
-
-    /// Machine-readable summary for `--json`, e.g. `"ran"` or
-    /// `"skipped_lock_held"`.
-    fn json_label(&self) -> String {
-        self.outcome.label().to_string()
-    }
-}
 
 #[derive(Serialize)]
 struct IndexOutput {
@@ -1317,8 +1241,20 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
     // worst-case wait for every one of them, and a separate acquisition leaves
     // a window for a contender to steal the lock between the prune and the
     // compaction it is supposed to precede.
-    let maintenance =
-        MaintenanceReport::from_result(vector_store.maintain(maintenance_lock_wait()).await)?;
+    // `--maintenance auto` lets a frequent incremental refresh skip a sweep the
+    // shared record says ran recently (aegis-91w); see `maintenance.rs`.
+    let maintenance = match maintenance::decide(
+        args.maintenance,
+        args.force,
+        vector_store.maintenance_status(),
+        crate::storage::now_unix(),
+        args.maintenance_interval_hours.saturating_mul(3600),
+    ) {
+        Decision::Run => {
+            MaintenanceReport::from_result(vector_store.maintain(maintenance_lock_wait()).await)?
+        }
+        skip => MaintenanceReport::skipped(skip),
+    };
     profile.compact_ms = t_compact.elapsed().as_millis();
 
     // A starved sweep is reported LOUDLY on stderr even under --quiet/--json.

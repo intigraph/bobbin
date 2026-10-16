@@ -52,6 +52,18 @@ pub struct IndexArgs {
     #[arg(long)]
     pub(in crate::cli) skip_calibrate: bool,
 
+    /// When this run prunes and compacts the store: `always` (default),
+    /// `auto` (only if the last compaction is older than
+    /// --maintenance-interval-hours, or with --force) or `never`. Use `auto`
+    /// for frequent incremental refreshes.
+    #[arg(long, value_enum, default_value_t)]
+    pub(in crate::cli) maintenance: super::maintenance::MaintenanceMode,
+
+    /// With --maintenance auto: the age of the last compaction that triggers
+    /// a new sweep.
+    #[arg(long, default_value_t = 24, value_name = "HOURS")]
+    pub(in crate::cli) maintenance_interval_hours: u64,
+
     /// Directory containing .bobbin/ config (defaults to current directory)
     #[arg(default_value = ".")]
     pub(in crate::cli) path: PathBuf,

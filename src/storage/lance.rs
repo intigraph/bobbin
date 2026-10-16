@@ -206,7 +206,7 @@ pub struct MaintenanceStatus {
 }
 
 /// Seconds since the unix epoch, or 0 if the clock is before it.
-fn now_unix() -> u64 {
+pub fn now_unix() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())

@@ -25,6 +25,9 @@ pub(super) async fn run(
             no_quipu_publish: false,
             include_globs: Vec::new(),
             skip_calibrate: true,
+            // Unchanged: a pack catch-up sweeps like any other index run.
+            maintenance: index::MaintenanceMode::Always,
+            maintenance_interval_hours: 24,
             path: home,
         },
         output,
