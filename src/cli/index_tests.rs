@@ -1,6 +1,7 @@
 //! Tests for the index command internals (sidecar of `index.rs`).
 
 use super::*;
+use crate::storage::MaintenanceOutcome;
 use crate::types::ChunkType;
 use tempfile::tempdir;
 
