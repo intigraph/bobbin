@@ -77,8 +77,25 @@ fn matching(root: &Path, input: &str) -> Vec<Breadcrumb> {
                     .iter()
                     .any(|word| !word.trim().is_empty() && input.contains(&word.to_lowercase()))
         })
-        .take(3)
         .collect()
+}
+
+// Local search returns repository-relative paths; ACL parsing requires the
+// same explicit repository scope used by ordinary context rendering.
+fn saved_query_path_allowed(
+    path: &str,
+    repo: Option<&str>,
+    access: &crate::access::RepoFilter,
+) -> bool {
+    let scoped =
+        if !path.starts_with("repos/") && !path.starts_with('/') && !path.starts_with("beads:") {
+            // Without repository identity a relative hit cannot be ACL-scoped.
+            let Some(repo) = repo else { return false };
+            format!("repos/{repo}/{path}")
+        } else {
+            path.to_owned()
+        };
+    access.is_path_allowed(&scoped)
 }
 
 fn line(text: &str) -> String {
@@ -158,7 +175,7 @@ pub(super) async fn prepare(
     let canonical_root = root.canonicalize().ok();
     let mut remaining = limit;
     for bc in matching(root, input) {
-        if remaining < 4 {
+        if remaining < 4 || result.keys.len() >= 3 {
             break;
         }
         let key = DedupKey {
@@ -266,7 +283,9 @@ pub(super) async fn prepare(
                     if lines.len() >= remaining {
                         break;
                     }
-                    if access.is_path_allowed(&path) && paths.insert(path.clone()) {
+                    if saved_query_path_allowed(&path, root_name.as_deref(), &access)
+                        && paths.insert(path.clone())
+                    {
                         lines.push(format!("- related: {}", line(&path)));
                     }
                 }

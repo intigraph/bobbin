@@ -166,7 +166,7 @@ async fn saved_query_uses_remote_search_role_budget_and_path_filter() {
         name: "default".into(),
         allow: vec![],
         deny: vec![],
-        deny_paths: vec!["secrets.*".into()],
+        deny_paths: vec!["secrets.*".into(), "harnesses/**".into()],
     }];
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -186,6 +186,7 @@ async fn saved_query_uses_remote_search_role_budget_and_path_filter() {
         let body = serde_json::json!({
             "query":"saved authentication query", "budget":{"max_lines":5,"used_lines":2},
             "files":[
+                {"path":"harnesses/worker/CLAUDE.md","language":"text","relevance":"direct","score":0.95,"chunks":[]},
                 {"path":"repos/project/related.rs","language":"rust","relevance":"direct","score":0.9,"chunks":[]},
                 {"path":"repos/project/secrets.key","language":"text","relevance":"direct","score":0.9,"chunks":[]}
             ],
@@ -202,9 +203,68 @@ async fn saved_query_uses_remote_search_role_budget_and_path_filter() {
         result.text
     );
     assert!(!result.text.contains("secrets.key"));
+    assert!(!result.text.contains("harnesses/"));
     assert!(result.text.lines().count() <= 9);
     let request = server.await.unwrap();
     assert!(request.contains("q=saved+authentication+query"));
     assert!(request.contains("budget=5"));
     assert!(request.contains("role="));
+}
+
+#[test]
+fn local_saved_query_subdirectory_acl_keeps_allowed_positive() {
+    let mut config = Config::default();
+    config.access.roles = vec![crate::config::RoleConfig {
+        name: "default".into(),
+        allow: vec![],
+        deny: vec![],
+        deny_paths: vec!["harnesses/**".into()],
+    }];
+    let access = crate::access::RepoFilter::from_config(&config.access, "default");
+    // These are the relative paths returned by the local search leg.
+    assert!(!saved_query_path_allowed(
+        "harnesses/worker/CLAUDE.md",
+        Some("project"),
+        &access
+    ));
+    assert!(saved_query_path_allowed(
+        "src/allowed.rs",
+        Some("project"),
+        &access
+    ));
+    assert!(!saved_query_path_allowed("src/allowed.rs", None, &access));
+    for path in [
+        "repos/project/harnesses/worker/CLAUDE.md",
+        "/project/src/a.rs",
+        "beads:issue",
+    ] {
+        assert_eq!(
+            saved_query_path_allowed(path, Some("project"), &access),
+            access.is_path_allowed(path)
+        );
+    }
+}
+
+#[tokio::test]
+async fn dedup_does_not_starve_fourth_match() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let bc = fixture(root);
+    let entries = (0..4)
+        .map(|i| {
+            let mut entry = bc.clone();
+            entry.name = format!("crumb-{i}");
+            entry.pinned_files.clear();
+            (entry.name.clone(), entry)
+        })
+        .collect();
+    BreadcrumbStore::new(root).save(&entries).unwrap();
+    let store = root.join(".bobbin/breadcrumbs.json");
+    let before = std::fs::read(&store).unwrap();
+    for expected in [3, 1, 0] {
+        let mut result = prepare(root, "refresh_token", "same", 60, &Config::default(), None).await;
+        assert_eq!(result.text.matches("=== Breadcrumb:").count(), expected);
+        result.commit();
+    }
+    assert_eq!(std::fs::read(store).unwrap(), before);
 }
