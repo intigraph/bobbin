@@ -12,8 +12,13 @@ use super::OutputConfig;
 use crate::config::Config;
 use crate::storage::{MetadataStore, VectorStore};
 
+#[path = "hook_breadcrumb_triggers.rs"]
+mod breadcrumb_triggers;
 #[path = "hook_breadcrumbs.rs"]
 mod breadcrumbs;
+#[path = "hook_primer.rs"]
+mod primer;
+use primer::extract_brief;
 
 /// Detect the git repo name from a directory by walking up to find `.git`.
 /// Returns the directory name containing `.git` (e.g. "aegis" for /home/user/gt/aegis/crew/ian/).
@@ -1277,6 +1282,9 @@ async fn inject_context_remote(
         eprintln!("bobbin: skipped (operational intent: {:?})", intent);
         return Ok(());
     }
+
+    let budget =
+        breadcrumb_triggers::prompt(&repo_root, &input, budget, &config, Some(server_url)).await;
 
     // 4. Assemble context via remote server (uses full ContextAssembler on server
     //    side, including coupling expansion and provenance bridging).
@@ -3639,6 +3647,8 @@ async fn inject_context_inner(args: InjectContextArgs) -> Result<()> {
     }
     let search_query = item_scoped_query.as_ref();
 
+    let budget = breadcrumb_triggers::prompt(&repo_root, &input, budget, &config, None).await;
+
     // 4. Open stores
     let lance_path = Config::lance_path(&repo_root);
     let db_path = Config::db_path(&repo_root);
@@ -3714,7 +3724,7 @@ async fn inject_context_inner(args: InjectContextArgs) -> Result<()> {
     };
 
     let context_config = ContextConfig {
-        budget_lines: cal_budget.unwrap_or(budget),
+        budget_lines: cal_budget.unwrap_or(budget).min(budget),
         budget_unit: config.context.budget_unit,
         depth: 1,
         max_coupled: 2, // Tightened from 3 to reduce coupled noise (matches remote mode)
@@ -4465,26 +4475,9 @@ async fn run_prime_context_inner() -> Result<()> {
     Ok(())
 }
 
-/// Extract brief primer text (title + first section only).
-fn extract_brief(primer: &str) -> String {
-    let mut result = String::new();
-    let mut heading_count = 0;
-    for line in primer.lines() {
-        if line.starts_with("## ") {
-            heading_count += 1;
-            if heading_count > 1 {
-                break;
-            }
-        }
-        result.push_str(line);
-        result.push('\n');
-    }
-    result.trim_end().to_string()
-}
-
 async fn run_post_tool_use(_args: PostToolUseArgs, _output: OutputConfig) -> Result<()> {
     // Never block tool completion — any error exits silently
-    match run_post_tool_use_inner(_args).await {
+    match run_post_tool_use_inner(_args, _output.server.as_deref()).await {
         Ok(()) => Ok(()),
         Err(e) => {
             eprintln!("bobbin post-tool-use: {:#}", e);
@@ -4835,7 +4828,7 @@ async fn run_reaction_search(
     )
 }
 
-async fn run_post_tool_use_inner(args: PostToolUseArgs) -> Result<()> {
+async fn run_post_tool_use_inner(args: PostToolUseArgs, server: Option<&str>) -> Result<()> {
     use crate::index::Embedder;
     use crate::reactions::{self, CompiledRule, DedupTracker, ReactionConfig, ToolEvent};
     use crate::search::context::{BridgeMode, ContentMode, ContextAssembler, ContextConfig};
@@ -4869,6 +4862,10 @@ async fn run_post_tool_use_inner(args: PostToolUseArgs) -> Result<()> {
 
     let config = Config::load(&Config::config_path(&repo_root)).unwrap_or_default();
     let budget = args.budget.unwrap_or(config.hooks.budget / 2); // Use half budget for post-tool
+
+    let mut triggered =
+        breadcrumb_triggers::tool(&repo_root, &input, budget, &config, server).await;
+    let budget = budget.saturating_sub(triggered.reserved);
 
     // 3a'. Upgrade a search dispatch to DiscoveredFiles when the tool_response named
     // files that really exist here. This runs after repo_root because "is this a file
@@ -4932,7 +4929,7 @@ async fn run_post_tool_use_inner(args: PostToolUseArgs) -> Result<()> {
     let mut dedup = DedupTracker::load(&repo_root, &input.session_id);
 
     // For ReactionsOnly mode with no reaction rules, nothing to do
-    if matches!(mode, DispatchMode::ReactionsOnly) && !has_reactions {
+    if matches!(mode, DispatchMode::ReactionsOnly) && !has_reactions && triggered.text.is_empty() {
         return Ok(());
     }
 
@@ -4976,7 +4973,7 @@ async fn run_post_tool_use_inner(args: PostToolUseArgs) -> Result<()> {
     let lance_path = Config::lance_path(&repo_root);
 
     // For RefsOnly (Read), we skip the search/related logic entirely
-    let mut context = String::new();
+    let mut context = triggered.text.clone();
     use std::fmt::Write;
     let mut lines_used: usize = 0;
     let mut coupled_count: usize = 0;
@@ -5092,7 +5089,7 @@ async fn run_post_tool_use_inner(args: PostToolUseArgs) -> Result<()> {
                 Err(_) => {
                     // Search failed — still report coupling if available
                     if coupled.is_empty() {
-                        return Ok(());
+                        break 'builtin None;
                     }
                     crate::search::context::ContextBundle {
                         capture: None,
@@ -5626,6 +5623,8 @@ async fn run_post_tool_use_inner(args: PostToolUseArgs) -> Result<()> {
         },
     };
     println!("{}", serde_json::to_string(&response)?);
+
+    triggered.commit();
 
     // 11a. Record and commit (bobbin-aa0), after the response is on stdout.
     record_non_prompt_injection(
