@@ -32,9 +32,11 @@ python3 docs/demos/breadcrumb-triggers/reproduce.py
 
 The baseline binary is revision `843dc42bae0cfd39718d29eaecb3b12fe6e8dbfe`.
 Its source differs from the branch baseline
-`e48be5b` only in README and evaluation documentation; executable source is
-identical. The recording prints both binary SHA256 values. The candidate
-binary is `c00d7d33c1a80aeafe1afe0c412bb0af156b65048326bb7c0f49503c214ff1df`.
+`e48be5bc7eafa9e66fa284ac891ffa5e67c2e234` only in README and evaluation
+documentation; executable source is identical. Candidate executable source:
+`40fd06fe143ead53e3326c6d6162f296c31959a5`; the subsequent base merge adds only
+evaluation documentation. The recording prints both binary SHA256 values. The candidate
+binary is `4178cb9d20f460e058acae76b04ce65eef98527ca86dd8278b0f5c417052f0e2`.
 This small recording is retained in Git alongside the reproducer. Playback
 requires a terminal replay tool; no inline video playback is claimed.
 
