@@ -1,0 +1,8 @@
+Script started on 2026-10-16 05:32:08-04:00 [COMMAND="stty -onlcr; /usr/bin/python3 docs/demos/l0-partial-20261016/reproduce.py" <not executed on terminal>]
+BASE: new partial report absent; preregistration positive control present
+CANDIDATE: 330 unique cells, 10/40 tasks, 213 injected / 83 skipped / 34 error
+POSITIVE CONTROL: 29 injected cells with nonzero hunk recall
+CORRUPTION CONTROL: one-byte CSV change fails the pinned digest
+INCOMPLETE: no full-cohort efficacy claim; no evaluation or model call executed
+
+Script done on 2026-10-16 05:32:08-04:00 [COMMAND_EXIT_CODE="0"]
