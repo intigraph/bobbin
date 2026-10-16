@@ -156,6 +156,10 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 urlencoding = "2"
 pdf-extract = "0.12"
 
+[target.'cfg(unix)'.dependencies]
+# Nonblocking, no-follow reads for untrusted hook metadata files.
+libc = "0.2"
+
 [features]
 knowledge = ["dep:quipu"]
 

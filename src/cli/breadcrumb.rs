@@ -39,7 +39,7 @@ pub struct BreadcrumbCreateArgs {
     /// Categorization tags
     #[arg(long, value_delimiter = ',')]
     tag: Vec<String>,
-    /// Future trigger keywords (stored now; hook matching is a later slice)
+    /// Case-insensitive literal keywords for prompt and tool hooks
     #[arg(long = "on", value_delimiter = ',')]
     keywords: Vec<String>,
     /// Days before expiry; zero means never expires
