@@ -21,6 +21,14 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.29.0](https://github.com/scbrown/bobbin/compare/v0.28.0...v0.29.0) (2026-10-16)
+
+
+### Features
+
+* **hooks:** trigger saved breadcrumb context from keywords ([#194](https://github.com/scbrown/bobbin/issues/194)) ([f5591d3](https://github.com/scbrown/bobbin/commit/f5591d37347ce39fa2399561e0196b65a1a09e33))
+* **index:** --maintenance auto, so frequent incremental runs skip a recent sweep ([#196](https://github.com/scbrown/bobbin/issues/196)) ([60529f0](https://github.com/scbrown/bobbin/commit/60529f0fc380d1ae98519b3758f9a1f5848fc4b2))
+
 ## [0.28.0](https://github.com/scbrown/bobbin/compare/v0.27.3...v0.28.0) (2026-10-14)
 
 
