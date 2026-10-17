@@ -25,6 +25,22 @@ Read [how Bobbin combines these signals](https://scbrown.github.io/bobbin/).
 
 ## Install
 
+**Debian and Ubuntu (amd64 and arm64):** install from the signed apt repository,
+which republishes each checksum-verified release, so `apt upgrade` (or
+unattended-upgrades) keeps it current. The package puts `bobbin` in `/usr/bin`.
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://scbrown.github.io/apt/key.gpg | sudo tee /etc/apt/keyrings/scbrown-stack.gpg >/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/scbrown-stack.gpg] https://scbrown.github.io/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/scbrown-stack.list
+sudo apt update && sudo apt install bobbin
+```
+
+Before trusting the key, `gpg --show-keys /etc/apt/keyrings/scbrown-stack.gpg`
+must print `AB5625C5612F643BF76464DF0DC99924994EC959`. Channels, pinning and
+rollback: [scbrown/apt](https://github.com/scbrown/apt#channels-and-pinning).
+
 Checksummed releases support Linux and macOS on x86-64 and ARM64. For Linux
 x86-64, with `curl`, `tar` and `sha256sum` installed:
 
