@@ -16,7 +16,8 @@ WHERE {
     ?s ?p ?o .
     FILTER(
       STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/code/bobbin/") ||
-      STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/doc/bobbin/")
+      STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/doc/bobbin/") ||
+      STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/chunk/bobbin/")
     )
     VALUES ?p {
       rdf:type rdfs:label
