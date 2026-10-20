@@ -1,0 +1,75 @@
+PREFIX aegis: <http://aegis.gastown.local/ontology/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX dct: <http://purl.org/dc/terms/>
+PREFIX sssom: <https://w3id.org/sssom/>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+# Public repository knowledge only. Bobbin publishes its replaceable snapshot
+# into ROOT, so graph/group selectors cannot see it. Keep this predicate list
+# aligned with Bobbin's generate_chunk_turtle output: selecting every outgoing
+# edge also pulls private operational literals into a public release artifact.
+CONSTRUCT { ?s ?p ?o }
+WHERE {
+  {
+    ?s ?p ?o .
+    FILTER(
+      STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/code/bobbin/") ||
+      STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/doc/bobbin/")
+    )
+    VALUES ?p {
+      rdf:type rdfs:label
+      aegis:filePath aegis:repo aegis:language
+      aegis:inDocument aegis:chunkOrder aegis:nextChunk aegis:mentions
+      aegis:name aegis:definedIn aegis:symbolKind
+      aegis:heading aegis:headingDepth
+      rdfs:comment rdfs:seeAlso prov:wasDerivedFrom dct:modified dct:isReplacedBy
+      aegis:knowledgeKind aegis:interfaceKind aegis:publicName aegis:status
+      aegis:supersessionStatus aegis:startHereOrder aegis:glossaryTerm
+      aegis:reviewAfter aegis:maxAge aegis:depends_on aegis:sourceHash
+    }
+    # Bobbin emits weak mention names as strings. Quipu may additionally
+    # resolve those names to IRIs under the same predicate in its local store;
+    # those derived edges do not satisfy the shipped string-valued shape.
+    FILTER(?p != aegis:mentions || isLiteral(?o))
+  }
+  UNION
+  {
+    ?s ?p ?o .
+    { ?s a sssom:MappingSet } UNION { ?s a owl:Axiom }
+    VALUES ?p {
+      rdf:type rdfs:label prov:wasDerivedFrom
+      sssom:mappings sssom:subject_id sssom:object_id sssom:predicate_id
+      sssom:subject_label sssom:object_label sssom:mapping_justification
+      sssom:predicate_modifier sssom:confidence sssom:author_id
+    }
+  }
+  UNION
+  {
+    VALUES ?s {
+      aegis:repo_bobbin
+      aegis:repo-embedded-knowledge-databases-directive-2026-09-03
+    }
+    ?s ?p ?o .
+  }
+  # Versioned crew memory is internal source, including references attached to
+  # otherwise public context nodes. Internal backups use a separate explicit scope.
+  FILTER(!STRSTARTS(STR(?s), "urn:quipu:memory:"))
+  FILTER(!STRSTARTS(STR(?p), "https://quipu.dev/memory#"))
+  FILTER(!STRSTARTS(STR(?o), "urn:quipu:memory:"))
+  # Work tracking identifiers are not public repository knowledge. Filter
+  # both endpoints and literal mentions instead of renaming entity identity.
+  FILTER(!REGEX(STR(?s), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))
+  FILTER(!REGEX(STR(?o), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))
+  # Exclude the whole node when a required label contains an internal ID.
+  # Dropping only its label would leave a typed, SHACL-invalid fragment.
+  MINUS {
+    ?s ?internalPredicate ?internalValue .
+    FILTER(REGEX(STR(?internalValue), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))
+  }
+  MINUS {
+    ?o ?targetPredicate ?targetValue .
+    FILTER(REGEX(STR(?targetValue), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))
+  }
+}

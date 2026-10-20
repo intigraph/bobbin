@@ -1,0 +1,32 @@
+[
+  {
+    "name": "repository_ideas",
+    "description": "Repository-owned repository ideas",
+    "template": "PREFIX a: <http://aegis.gastown.local/ontology/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT * WHERE { ?s a a:Concept; rdfs:comment ?summary . FILTER(STRSTARTS(STR(?s), \"http://aegis.gastown.local/ontology/doc/bobbin/\") || STRSTARTS(STR(?s), \"http://aegis.gastown.local/ontology/code/bobbin/\")) } ORDER BY ?s LIMIT 100",
+    "params": []
+  },
+  {
+    "name": "repository_interfaces",
+    "description": "Repository-owned repository interfaces",
+    "template": "PREFIX a: <http://aegis.gastown.local/ontology/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT * WHERE { ?s a:interfaceKind ?kind; a:publicName ?name . FILTER(STRSTARTS(STR(?s), \"http://aegis.gastown.local/ontology/doc/bobbin/\") || STRSTARTS(STR(?s), \"http://aegis.gastown.local/ontology/code/bobbin/\")) } ORDER BY ?s LIMIT 100",
+    "params": []
+  },
+  {
+    "name": "repository_decisions",
+    "description": "Repository-owned repository decisions",
+    "template": "PREFIX a: <http://aegis.gastown.local/ontology/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT * WHERE { ?s a a:DecisionRecord; a:status ?status . OPTIONAL { ?s <http://purl.org/dc/terms/isReplacedBy> ?successor } FILTER(STRSTARTS(STR(?s), \"http://aegis.gastown.local/ontology/doc/bobbin/\") || STRSTARTS(STR(?s), \"http://aegis.gastown.local/ontology/code/bobbin/\")) } ORDER BY ?s LIMIT 100",
+    "params": []
+  },
+  {
+    "name": "repository_start_here",
+    "description": "Repository-owned repository start here",
+    "template": "PREFIX a: <http://aegis.gastown.local/ontology/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT * WHERE { ?s a:startHereOrder ?order . FILTER(STRSTARTS(STR(?s), \"http://aegis.gastown.local/ontology/doc/bobbin/\") || STRSTARTS(STR(?s), \"http://aegis.gastown.local/ontology/code/bobbin/\")) } ORDER BY ?s LIMIT 100",
+    "params": []
+  },
+  {
+    "name": "repository_freshness",
+    "description": "Repository-owned repository freshness",
+    "template": "PREFIX a: <http://aegis.gastown.local/ontology/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT * WHERE { ?s a:reviewAfter ?reviewAfter; a:maxAge ?maxAgeSeconds . FILTER(STRSTARTS(STR(?s), \"http://aegis.gastown.local/ontology/doc/bobbin/\") || STRSTARTS(STR(?s), \"http://aegis.gastown.local/ontology/code/bobbin/\")) } ORDER BY ?s LIMIT 100",
+    "params": []
+  }
+]

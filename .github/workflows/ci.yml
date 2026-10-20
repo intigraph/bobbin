@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install private-key scanner
-        run: python3 -m pip install pre-commit==4.6.1 pyyaml
+        run: python3 -m pip install pre-commit==4.6.1 pyyaml rdflib==7.6.0
       - name: Private-key refusal controls and tracked-file scan
         run: python3 scripts/check-private-keys.py
 
@@ -30,6 +30,12 @@ jobs:
 
       - name: Crates publication contract
         run: python3 scripts/test-crates-workflow.py
+
+      - name: Repository pendant source and refusal controls
+        run: |
+          python3 scripts/test-repository-share-query.py
+          python3 scripts/test-repository-knowledge.py
+          python3 scripts/test-repository-share-publication.py
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake g++
