@@ -11,6 +11,8 @@ from pathlib import Path
 import re
 import shutil
 import sqlite3
+import io
+import tarfile
 import subprocess
 
 
@@ -93,6 +95,28 @@ def indexed_labels(binary, database, subjects):
     return labels
 
 
+def materialize_release(source, revision, destination):
+    """Index only exact tracked release bytes in a new private source tree."""
+    destination = Path(destination)
+    destination.mkdir(mode=0o700)
+    archive = subprocess.run(['git', '-C', str(source), 'archive', '--format=tar', revision],
+                             check=True, capture_output=True).stdout
+    with tarfile.open(fileobj=io.BytesIO(archive), mode='r:') as bundle:
+        for member in bundle.getmembers():
+            relative = Path(member.name)
+            if (relative.is_absolute() or '..' in relative.parts
+                    or not (member.isfile() or member.isdir())):
+                raise ValueError('unsupported tracked release member')
+            target = destination / relative
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with bundle.extractfile(member) as original, target.open('xb') as copied:
+                    shutil.copyfileobj(original, copied)
+    return destination
+
+
 def alignment_carrier(source):
     """An explicit empty reviewed carrier differs from missing or corrupt data.
 
@@ -140,6 +164,12 @@ def build(revision, source, tooling, binary, bobbin, output):
         return command(args, env=env, cwd=private)
     policy = private / 'policy.ttl'
     run(['python3', tooling / 'scripts/private-share-policy.py', policy])
+    corpus = materialize_release(source, revision, private / 'source')
+    (corpus / '.bobbin').mkdir(exist_ok=True)
+    index_database = private / 'indexed-graph.db'
+    # Bobbin resolves embedded graph state at --source, not at the vector
+    # index root. Explicit private configuration avoids global-store fallback.
+    (corpus / '.bobbin/config.toml').write_text('[quipu]\nstore_path = ' + json.dumps(str(index_database)) + '\n')
     index = private / 'index'; (index / '.bobbin').mkdir(parents=True)
     (index / '.bobbin/config.toml').write_text('''quipu_push_chunks = true
 
@@ -155,10 +185,9 @@ batch_size = 64
 ''')
     env = {k: v for k, v in os.environ.items()
            if k not in ('BOBBIN_SERVER', 'BOBBIN_QUIPU_REMOTE')}
-    run([bobbin, 'index', index, '--source', source, '--repo', slug,
+    run([bobbin, 'index', index, '--source', corpus, '--repo', slug,
              '--force', '--skip-calibrate', '--json'], env=env)
     database = private / 'producer.db'
-    index_database = index / '.bobbin/quipu/quipu.db'
     if not index_database.is_file():
         raise ValueError('indexer did not produce the repository graph')
     with sqlite3.connect('file:' + str(index_database) + '?mode=ro', uri=True) as original:

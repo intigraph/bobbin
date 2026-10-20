@@ -21,6 +21,24 @@ builder_spec = importlib.util.spec_from_file_location('share_builder', ROOT / 's
 builder = importlib.util.module_from_spec(builder_spec); builder_spec.loader.exec_module(builder)
 
 
+class ReleaseSnapshot(unittest.TestCase):
+    def test_real_git_archive_excludes_untracked_key_and_preserves_source(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); source = root / 'source'; source.mkdir()
+            subprocess.run(['git', 'init', '-q', str(source)], check=True)
+            (source / 'README.md').write_text('tracked pointer source\n')
+            subprocess.run(['git', '-C', str(source), 'add', 'README.md'], check=True)
+            subprocess.run(['git', '-C', str(source), '-c', 'user.name=fixture',
+                            '-c', 'user.email=fixture@example.org', 'commit', '-qm', 'fixture'], check=True)
+            (source / 'private.key').write_text('synthetic untracked sentinel')
+            revision = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
+            copied = builder.materialize_release(source, revision, root / 'copied')
+            self.assertEqual((copied / 'README.md').read_bytes(), (source / 'README.md').read_bytes())
+            self.assertFalse((copied / 'private.key').exists())
+            self.assertEqual((source / 'private.key').read_text(), 'synthetic untracked sentinel')
+            self.assertFalse((source / '.bobbin').exists())
+
+
 class AlignmentCarrier(unittest.TestCase):
     def test_explicit_empty_positive_missing_corrupt_and_nonempty_negative(self):
         with tempfile.TemporaryDirectory() as folder:
