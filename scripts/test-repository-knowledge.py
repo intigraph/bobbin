@@ -110,10 +110,10 @@ class Knowledge(unittest.TestCase):
         data = self.root / 'curated.ttl'; data.write_text(self.render())
         args = [os.environ['QUIPU_TEST_BIN'], 'validate', '--shapes',
                 str(ROOT / 'docs/knowledge/repository-knowledge.shapes.ttl'), '--data', str(data), '--format', 'json']
-        positive = subprocess.run(args, capture_output=True, text=True)
+        positive = subprocess.run(args, capture_output=True, text=True, cwd=self.root)
         self.assertEqual(positive.returncode, 0, positive.stderr + positive.stdout)
         data.write_text('\n'.join(line for line in data.read_text().splitlines() if '/reviewAfter>' not in line))
-        negative = subprocess.run(args, capture_output=True, text=True)
+        negative = subprocess.run(args, capture_output=True, text=True, cwd=self.root)
         self.assertNotEqual(negative.returncode, 0, negative.stdout)
 
 

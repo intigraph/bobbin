@@ -14,9 +14,9 @@ import sqlite3
 import subprocess
 
 
-def command(args, *, env=None):
+def command(args, *, env=None, cwd=None):
     return subprocess.run([str(v) for v in args], check=True, capture_output=True,
-                          text=True, env=env).stdout
+                          text=True, env=env, cwd=cwd).stdout
 
 
 def local_mcp(binary, database, calls):
@@ -34,7 +34,7 @@ def local_mcp(binary, database, calls):
     values = []
     with subprocess.Popen([str(binary), 'mcp', '--db', str(database)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True) as process:
+            text=True, cwd=Path(database).parent) as process:
         selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ)
         try:
@@ -136,8 +136,10 @@ def build(revision, source, tooling, binary, bobbin, output):
         raise ValueError('release lacks a supported public corpus positive control')
     private = output.parent / 'build-private'
     private.mkdir(mode=0o700)
+    def run(args, *, env=None):
+        return command(args, env=env, cwd=private)
     policy = private / 'policy.ttl'
-    command(['python3', tooling / 'scripts/private-share-policy.py', policy])
+    run(['python3', tooling / 'scripts/private-share-policy.py', policy])
     index = private / 'index'; (index / '.bobbin').mkdir(parents=True)
     (index / '.bobbin/config.toml').write_text('''quipu_push_chunks = true
 
@@ -153,7 +155,7 @@ batch_size = 64
 ''')
     env = {k: v for k, v in os.environ.items()
            if k not in ('BOBBIN_SERVER', 'BOBBIN_QUIPU_REMOTE')}
-    command([bobbin, 'index', index, '--source', source, '--repo', slug,
+    run([bobbin, 'index', index, '--source', source, '--repo', slug,
              '--force', '--skip-calibrate', '--json'], env=env)
     database = private / 'producer.db'
     index_database = index / '.bobbin/quipu/quipu.db'
@@ -166,11 +168,11 @@ batch_size = 64
     if not shapes:
         raise ValueError('verified engine source has no receiver shapes')
     for shape in shapes:
-        command([binary, 'shapes', 'load', shape.stem, shape, '--db', database])
-    command([binary, 'shapes', 'load', 'publication-policy',
+        run([binary, 'shapes', 'load', shape.stem, shape, '--db', database])
+    run([binary, 'shapes', 'load', 'publication-policy',
              tooling / 'docs/knowledge/publication-policy.shapes.ttl', '--db', database])
-    command([binary, 'knot', tooling / 'docs/knowledge/publication-policy.ttl', '--db', database])
-    command([binary, 'knot', policy, '--graph', 'urn:quipu:private-release-policy', '--db', database])
+    run([binary, 'knot', tooling / 'docs/knowledge/publication-policy.ttl', '--db', database])
+    run([binary, 'knot', policy, '--graph', 'urn:quipu:private-release-policy', '--db', database])
     context = private / 'context.ttl'
     context.write_text(f'''@prefix aegis: <http://aegis.gastown.local/ontology/> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -180,7 +182,7 @@ aegis:repo-embedded-knowledge-databases-directive-2026-09-03 a aegis:Directive ;
   rdfs:label "Repository-embedded knowledge databases" ;
   aegis:issuedBy "Stiwi" ; aegis:applies_to aegis:repo_{slug} .
 ''')
-    command([binary, 'knot', context, '--db', database])
+    run([binary, 'knot', context, '--db', database])
     # Curated repository content and validating shapes are repo-owned. Refuse
     # an incomplete source proposal rather than minting a pointer-only stub.
     registry_path = source / 'docs/knowledge/repository-knowledge.json'
@@ -197,32 +199,32 @@ aegis:repo-embedded-knowledge-databases-directive-2026-09-03 a aegis:Directive ;
     records = json.loads(registry_path.read_text())['records']
     labels = indexed_labels(binary, database, sorted({record['subject'] for record in records}))
     knowledge.write_text(generator.render(source, revision, lambda subject: labels.get(subject)) + '\n' + alignment_carrier(source))
-    command([binary, 'validate', '--shapes', constraints, '--data', knowledge])
-    command([binary, 'shapes', 'load', 'repository-knowledge', constraints, '--db', database])
-    command([binary, 'knot', knowledge, '--db', database])
+    run([binary, 'validate', '--shapes', constraints, '--data', knowledge])
+    run([binary, 'shapes', 'load', 'repository-knowledge', constraints, '--db', database])
+    run([binary, 'knot', knowledge, '--db', database])
     register_queries(binary, database, json.loads(queries.read_text()))
     query = (source / 'queries/repository-share-bobbin.rq').read_text()
     stage = private / 'share'
-    command([binary, 'share', '--construct', query, '--turtle', '--output', stage, '--db', database])
+    run([binary, 'share', '--construct', query, '--turtle', '--output', stage, '--db', database])
     if not (stage / 'shapes.ttl').is_file() or (stage / 'shapes.ttl').stat().st_size == 0:
         raise ValueError('repository share omitted receiver shapes')
     receiver = private / 'receiver.db'
-    command([binary, 'shapes', 'load', 'repository-share', stage / 'shapes.ttl', '--db', receiver])
-    imported = json.loads(command([binary, 'import', stage, '--db', receiver]))
+    run([binary, 'shapes', 'load', 'repository-share', stage / 'shapes.ttl', '--db', receiver])
+    imported = json.loads(run([binary, 'import', stage, '--db', receiver]))
     if (imported.get('outcome') != 'staged'
             or imported.get('promotion', {}).get('eligible') is not True
             or type(imported.get('triples', {}).get('accepted')) is not int
             or imported['triples']['accepted'] <= 3):
         raise ValueError('repository receiver did not admit a non-stub corpus')
-    command([binary, 'import', 'promote', imported['share_id'], '--db', receiver])
-    positive = command([binary, 'query',
+    run([binary, 'import', 'promote', imported['share_id'], '--db', receiver])
+    positive = run([binary, 'query',
         'SELECT ?s WHERE { ?s <http://aegis.gastown.local/ontology/filePath> '
         + json.dumps(control) + ' } LIMIT 1', '--db', receiver])
     if re.search(r'\n1 results\s*$', positive) is None:
         raise ValueError('repository corpus positive control missing after import')
-    command(['python3', tooling / 'scripts/verify-repository-share-receiver.py',
+    run(['python3', tooling / 'scripts/verify-repository-share-receiver.py',
              binary, stage, receiver, private])
-    if command(['git', '-C', source, 'status', '--porcelain']).strip():
+    if run(['git', '-C', source, 'status', '--porcelain']).strip():
         raise ValueError('indexing changed the exact repository source')
     shutil.move(stage, output)
     return {'triples': imported['triples']['accepted'], 'positive_file': control}
