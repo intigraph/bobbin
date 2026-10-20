@@ -16,7 +16,7 @@ QUERY = (Path(__file__).resolve().parents[1] / 'queries/repository-share-bobbin.
 class RepositoryQuery(unittest.TestCase):
     def test_pointer_corpus_and_private_boundaries(self):
         source = Graph()
-        doc, chunk = DOC['README.md'], DOC['README.md/chunk/0']
+        doc, chunk = DOC['README.md'], URIRef(str(A) + 'chunk/bobbin/README.md#C1')
         expected = {
             (doc, RDF.type, A.Document),
             (doc, A.filePath, Literal('README.md')),
