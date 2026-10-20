@@ -68,7 +68,14 @@ def package(stage, archive):
 
 
 def held():
-    return Path(os.environ.get('QUIPU_SHARE_HOLD_FILE', str(Path.home() / '.quipu-share-hold'))).exists()
+    path = Path(os.environ.get("QUIPU_SHARE_HOLD_FILE", str(Path.home() / ".quipu-share-hold")))
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise ValueError("cannot inspect publication hold") from error
+    return True
 
 
 def publish(tag, revision, output):

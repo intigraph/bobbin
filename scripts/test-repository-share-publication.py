@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
 
@@ -82,6 +83,21 @@ class Publication(unittest.TestCase):
         self.archive.with_name(self.archive.name + '.sha256').write_text('wrong')
         with self.assertRaisesRegex(ValueError, 'checksum'):
             verifier.verify(self.root, 'v1.2.3', self.revision)
+
+    def test_hold_absent_and_dangling_symlink_before_any_build(self):
+        hold = self.root / "hold"
+        with patch.dict(publisher.os.environ, {"QUIPU_SHARE_HOLD_FILE": str(hold)}):
+            self.assertFalse(publisher.held())
+            hold.symlink_to(self.root / "missing-target")
+            self.assertTrue(publisher.held())
+            with self.assertRaisesRegex(ValueError, "held before"):
+                publisher.publish("invalid-tag", "invalid-revision", self.root / "output")
+            self.assertFalse((self.root / "output").exists())
+
+    def test_unreadable_hold_fails_closed(self):
+        with patch.object(Path, "lstat", side_effect=PermissionError("synthetic denied")):
+            with self.assertRaisesRegex(ValueError, "cannot inspect publication hold"):
+                publisher.held()
 
     def test_wait_is_bounded(self):
         calls, pauses = [], []
