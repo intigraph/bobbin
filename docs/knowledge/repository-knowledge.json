@@ -1,5 +1,5 @@
 {
-  "source_revision": "2b1ba22cb0f2b8d26354507c3eb1b6fe6890f7f8",
+  "source_revision": "b036433f55b75ddb8520d5bf4ad0b681464187eb",
   "reviewed_at": "2026-10-20T22:30:00Z",
   "max_age_seconds": 2592000,
   "records": [
@@ -109,7 +109,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/bobbin/README.md",
       "summary": "Start with installation and the first successful search, then read architecture and contributor guidance.",
-      "source_sha256": "b919f7e1618d9819ad6057cd3dfc296aff12fe82863bf2e49320bdebf0c55b1f",
+      "source_sha256": "77189862c0136aad56cfb5407ebb7ae99e913f6823105ffc146217a54653686d",
       "properties": {
         "startHereOrder": "1"
       }
