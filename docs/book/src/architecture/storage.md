@@ -34,6 +34,13 @@ chunks table:
 
 LanceDB also maintains an FTS index on the `content` field for keyword search.
 
+Reparsed files replace their chunk-level relationship edges even when parsing
+emits no new edges. The indexer clears selected paths in batches of at most 100,
+scoped to the repository, so other repositories' edges remain intact. Each batch
+uses the existing conflict retries; a persistent error stops indexing before
+replacement edges are inserted. Deletion across batches is not atomic. The
+existing legacy absolute-path edge cleanup runs before these scoped batches.
+
 ## SQLite (Auxiliary)
 
 SQLite only stores temporal coupling data and global metadata:
