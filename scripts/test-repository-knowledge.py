@@ -102,6 +102,51 @@ class AlignmentCarrier(unittest.TestCase):
                 builder.alignment_carrier(root)
 
 
+    def test_native_alignment_transport_is_advertised_and_hash_bound(self):
+        import hashlib
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            private = root / "private"
+            private.mkdir()
+            for name, usage in (
+                ("current", "[--queries <name>]... [--alignments <file>] [--turtle]"),
+                ("older", "[--queries <name>]... [--turtle]"),
+            ):
+                engine = root / name
+                # Real engines print share usage to stderr and exit nonzero.
+                engine.write_text(f"#!/bin/sh\necho 'usage: quipu share {usage}' >&2\nexit 1\n")
+                engine.chmod(0o755)
+            self.assertTrue(builder.native_alignments(root / "current", private))
+            self.assertFalse(builder.native_alignments(root / "older", private))
+            reviewed = ROOT / "docs/knowledge/alignments.ttl"
+            stage = root / "share"
+            stage.mkdir()
+            shutil.copyfile(reviewed, stage / "alignments.ttl")
+            manifest = {
+                "alignments_hash": "sha256:"
+                + hashlib.sha256(reviewed.read_bytes()).hexdigest(),
+                "files": {"alignments": "alignments.ttl"},
+            }
+            (stage / "manifest.json").write_text(json.dumps(manifest))
+            builder.verify_carried_alignments(stage, reviewed)
+            for corrupt in (
+                {**manifest, "alignments_hash": manifest["alignments_hash"][7:]},
+                {**manifest, "files": {}},
+            ):
+                (stage / "manifest.json").write_text(json.dumps(corrupt))
+                with self.assertRaisesRegex(ValueError, "reviewed alignments"):
+                    builder.verify_carried_alignments(stage, reviewed)
+            (stage / "manifest.json").write_text(json.dumps(manifest))
+            with (stage / "alignments.ttl").open("a") as copied:
+                copied.write("<urn:x> <urn:p> <urn:y> .\n")
+            with self.assertRaisesRegex(ValueError, "reviewed alignments"):
+                builder.verify_carried_alignments(stage, reviewed)
+            (stage / "alignments.ttl").unlink()
+            with self.assertRaisesRegex(ValueError, "reviewed alignments"):
+                builder.verify_carried_alignments(stage, reviewed)
+
+
 class NativeIsolation(unittest.TestCase):
     def test_real_subprocess_cannot_see_synthetic_global_config_or_endpoints(self):
         with tempfile.TemporaryDirectory() as folder:

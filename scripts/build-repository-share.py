@@ -241,6 +241,35 @@ def alignment_carrier(source):
     return data.decode()
 
 
+def native_alignments(binary, private):
+    """Engines that advertise --alignments carry the reviewed physical file.
+
+    Older engines keep the inline empty carrier and never emit an undeclared
+    archive member that an older receiver would refuse.
+    """
+    usage = subprocess.run(
+        [str(binary), "share", "--help"],
+        capture_output=True,
+        text=True,
+        env=isolated_environment(private),
+        cwd=private,
+    )
+    return "--alignments <file>" in usage.stdout + usage.stderr
+
+
+def verify_carried_alignments(stage, alignments):
+    data = Path(alignments).read_bytes()
+    carried = json.loads((Path(stage) / "manifest.json").read_text())
+    copied = Path(stage) / "alignments.ttl"
+    if (
+        carried.get("alignments_hash") != "sha256:" + hashlib.sha256(data).hexdigest()
+        or carried.get("files", {}).get("alignments") != "alignments.ttl"
+        or not copied.is_file()
+        or copied.read_bytes() != data
+    ):
+        raise ValueError("native share did not carry the reviewed alignments")
+
+
 def build(revision, source, tooling, binary, bobbin, output):
     repository = "scbrown/bobbin"
     source, tooling, output = map(Path, (source, tooling, output))
@@ -410,19 +439,14 @@ aegis:repo-embedded-knowledge-databases-directive-2026-09-03 a aegis:Directive ;
     register_queries(binary, database, json.loads(queries.read_text()))
     query = (source / "queries/repository-share-bobbin.rq").read_text()
     stage = private / "share"
+    native = native_alignments(binary, private)
     run(
-        [
-            binary,
-            "share",
-            "--construct",
-            query,
-            "--turtle",
-            "--output",
-            stage,
-            "--db",
-            database,
-        ]
+        [binary, "share", "--construct", query, "--turtle", "--output", stage]
+        + (["--alignments", alignments] if native else [])
+        + ["--db", database]
     )
+    if native:
+        verify_carried_alignments(stage, alignments)
     if (
         not (stage / "shapes.ttl").is_file()
         or (stage / "shapes.ttl").stat().st_size == 0
