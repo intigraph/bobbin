@@ -1765,7 +1765,9 @@ def calibrate(
 @click.option("--out", "out_path", required=True, help="JSONL file to append arm scores to.")
 @click.option("--workdir", default=None, help="Where to clone task repos (default: a temp dir).")
 @click.option("--index-timeout", default=1800, type=int, help="Bobbin index timeout in seconds.")
-def l0(tasks_dir, task_ids, arms, budgets, out_path, workdir, index_timeout):
+@click.option("--reuse-model-dir", type=click.Path(path_type=Path, exists=True, file_okay=False),
+              default=None, help="Opt-in sealed CPU-index reuse; exact isolated native model cache.")
+def l0(tasks_dir, task_ids, arms, budgets, out_path, workdir, index_timeout, reuse_model_dir):
     """Eval v2 L0: offline retrieval through the production injection hook.
 
     No agent and no LLM calls. Scores each arm's would-be injection against the
@@ -1794,6 +1796,12 @@ def l0(tasks_dir, task_ids, arms, budgets, out_path, workdir, index_timeout):
         sys.exit(1)
 
     scratch = Path(workdir) if workdir else L0.new_scratch()
+    reuse_limits = None
+    if reuse_model_dir is not None:
+        from runner.index_reuse import check_scope
+        reuse_limits = check_scope()
+        if scratch.is_symlink() or (scratch.exists() and any(scratch.iterdir())):
+            raise click.ClickException("sealed reuse requires a fresh empty run workspace")
     scratch.mkdir(parents=True, exist_ok=True)
     env = L0.isolated_env(scratch)
     # setup_bobbin inherits the process environment, so isolate it too.
@@ -1813,6 +1821,8 @@ def l0(tasks_dir, task_ids, arms, budgets, out_path, workdir, index_timeout):
     os.environ["PATH"] = env["PATH"]
 
     out = Path(out_path)
+    if reuse_model_dir is not None and out.exists():
+        raise click.ClickException("sealed reuse requires a fresh run/output; never resume partial scores")
     prereg = Path(__file__).resolve().parent.parent / "v2" / "PREREGISTRATION.md"
     manifest = {
         "kind": "manifest",
@@ -1829,11 +1839,53 @@ def l0(tasks_dir, task_ids, arms, budgets, out_path, workdir, index_timeout):
         "budgets": budget_list,
         "tasks": [t["id"] for t in tasks],
     }
+    from runner.index_reuse import planned_cells
+    cells = planned_cells(tasks, arm_list, budget_list)
+    manifest["planned_cells"] = cells
+    manifest["index_reuse"] = "sealed-no-coupling/v1" if reuse_model_dir else "legacy"
+    if reuse_limits is not None:
+        manifest["resource_limits"] = reuse_limits
+        manifest["wall_supervisor_required_seconds"] = 21600
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("a") as fh:
         fh.write(json.dumps(manifest) + "\n")
 
+    derived_sources = {}
+    observed_scores = []
+    if reuse_model_dir is not None:
+        from runner.index_reuse import write_coverage
+        write_coverage(scratch / "matrix-coverage.json", cells, observed_scores)
+
     def index(ws: Path, overrides=None):
+        if reuse_model_dir is not None:
+            from runner.index_reuse import MARKER, ReuseRefused, derive_no_coupling, identity, seal, verify
+            # Never reuse a pre-existing unsealed artifact or silently rebuild
+            # after mismatch. The no-coupling copy is made before any hook runs.
+            root = ws / ".bobbin"
+            if (root / MARKER).exists():
+                verify(ws, Path(bobbin), reuse_model_dir, overrides)
+                return
+            if overrides == {"git.coupling_enabled": "false"}:
+                if ws not in derived_sources:
+                    raise click.ClickException("unknown no-coupling workspace identity")
+                source = derived_sources[ws]
+                cost = derive_no_coupling(source, ws, Path(bobbin), reuse_model_dir)
+            else:
+                if overrides is not None or root.exists():
+                    raise click.ClickException("unsealed index or unsupported arm; choose a fresh run")
+                started = __import__("time").monotonic()
+                admitted = []
+                cost = setup_bobbin(str(ws), timeout=index_timeout,
+                                    before_index=lambda path: admitted.append(
+                                        identity(path, Path(bobbin), reuse_model_dir, None)))
+                if admitted != [identity(ws, Path(bobbin), reuse_model_dir, None)]:
+                    raise ReuseRefused("index input changed during build or admission was skipped")
+                sealed = seal(ws, Path(bobbin), reuse_model_dir, None)
+                cost.update(kind="cold", seconds=__import__("time").monotonic() - started,
+                            payload_bytes=sealed["payload"]["bytes"], native_index_calls=1)
+            with (scratch / "index-costs.jsonl").open("a") as fh:
+                fh.write(json.dumps({"workspace": str(ws), **cost}) + "\n")
+            return
         fingerprint = {
             "head": _sp.check_output(["git", "rev-parse", "HEAD"], cwd=ws, text=True).strip(),
             "bobbin_sha256": manifest["bobbin_sha256"], "overrides": overrides,
@@ -1853,8 +1905,45 @@ def l0(tasks_dir, task_ids, arms, budgets, out_path, workdir, index_timeout):
             ws = clone_repo(task["repo"], str(scratch / task["id"]))
         checkout_parent(ws, task["commit"])
         index(ws)
-        scores = L0.run_task(task, ws, arm_list, budget_list, bobbin, env, index)
-        L0.write_jsonl(out, scores)
+        if reuse_model_dir is not None:
+            from runner.cell_isolation import isolated_cell
+            # Same basename for native labels/affinity, separate coupling data.
+            fork = ws.parent / "nocoupling" / ws.name
+            derived_sources[fork] = ws
+            if "-coupling" in arm_list:
+                shutil.copytree(ws, fork, symlinks=True, ignore=shutil.ignore_patterns(".bobbin"))
+                index(fork, {"git.coupling_enabled": "false"})
+            scores = []
+            for budget in budget_list:
+                for arm in arm_list:
+                    target = fork if arm == "-coupling" else ws
+                    overrides = {"git.coupling_enabled": "false"} if arm == "-coupling" else None
+                    journal = scratch / "cell-state" / task["id"] / arm / str(budget)
+                    try:
+                        row = isolated_cell(
+                            target, Path(bobbin), reuse_model_dir, overrides, journal,
+                            lambda a=arm, b=budget: L0.run_task(
+                                task, ws, [a], [b], bobbin, env, index,
+                                nocoupling_workspace=fork))
+                    except Exception as exc:
+                        # Preserve the explicit failure and all prior cells;
+                        # remaining cells stay missing. No reset/resend follows.
+                        row = L0.ArmScore(task["id"], arm, budget, "error",
+                                          f"isolated cell refused: {type(exc).__name__}: {exc}")
+                        L0.write_jsonl(out, [row])
+                        observed_scores.append(row)
+                        write_coverage(scratch / "matrix-coverage.json", cells, observed_scores)
+                        raise click.ClickException(row.detail) from exc
+                    L0.write_jsonl(out, [row])
+                    with out.open("a") as written:
+                        written.flush()
+                        os.fsync(written.fileno())
+                    observed_scores.append(row)
+                    write_coverage(scratch / "matrix-coverage.json", cells, observed_scores)
+                    scores.append(row)
+        else:
+            scores = L0.run_task(task, ws, arm_list, budget_list, bobbin, env, index)
+            L0.write_jsonl(out, scores)
         by = {}
         for s in scores:
             by.setdefault(s.outcome, 0)
