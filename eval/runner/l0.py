@@ -666,6 +666,8 @@ def run_task(
     bobbin: str,
     env: dict[str, str],
     index_workspace: Callable[[Path, dict[str, str] | None], None],
+    *,
+    nocoupling_workspace: Path | None = None,
 ) -> list[ArmScore]:
     """Score every (arm, budget) for one task on an already-checked-out workspace.
 
@@ -679,7 +681,7 @@ def run_task(
     arms = list(arms)
     nocoupling_ws: Path | None = None
     if "-coupling" in arms:
-        nocoupling_ws = workspace.parent / (workspace.name + "-nocoupling")
+        nocoupling_ws = nocoupling_workspace or workspace.parent / (workspace.name + "-nocoupling")
         if not nocoupling_ws.exists():
             shutil.copytree(
                 workspace, nocoupling_ws, symlinks=True, ignore=shutil.ignore_patterns(".bobbin")
