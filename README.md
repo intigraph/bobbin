@@ -165,8 +165,8 @@ when.
 | [caboodle](https://github.com/scbrown/caboodle) | 🧰 Agent Platform Toolkit - installs and configures the quipu stack |
 | [quipu](https://github.com/scbrown/quipu) | stores shared facts with provenance and history; can check writes against your rules |
 | [camayoc](https://github.com/scbrown/camayoc) | prepares knowledge and vocabulary for Quipu, with checks before it is admitted |
-| [bobbin](https://github.com/scbrown/bobbin) | searches your code and can include related knowledge from Quipu |
-| [yupana](https://github.com/scbrown/yupana) | shows code impact and can read policies from Quipu to check changes |
+| [bobbin](https://github.com/scbrown/bobbin) | indexes your codebase and injects context from that index and Quipu knowledge |
+| [yupana](https://github.com/scbrown/yupana) | shows code impact and can read policies from Quipu to govern agent actions |
 | [desire-path](https://github.com/scbrown/desire-path) | turns agent mistakes into feature requests; works on its own without Quipu |
 | [seeds](https://github.com/scbrown/seeds) | a work item tracker backed by the Quipu knowledge base |
 | [shantytown](https://github.com/scbrown/shantytown) | runs crews of AI agents on work items, triggered by hand, on a schedule or by events; can share work and memory through Quipu |
