@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import signal
 import re
 import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +122,7 @@ def setup_bobbin(
     config_overrides: dict[str, str] | None = None,
     initialize: bool = True,
     init_timeout: int = 30,
+    before_index: Callable[[Path], None] | None = None,
 ) -> dict[str, Any]:
     """Run bobbin init and index on the given workspace.
 
@@ -175,6 +178,8 @@ def setup_bobbin(
     claude_md.write_text(_WORKSPACE_CLAUDE_MD, encoding="utf-8")
     logger.info("Wrote CLAUDE.md to %s", claude_md)
 
+    if before_index is not None:
+        before_index(ws)
     logger.info("Indexing workspace %s", ws)
     t0 = time.monotonic()
     try:
@@ -184,17 +189,15 @@ def setup_bobbin(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            start_new_session=(os.name == "posix"),
         )
-        # Stream stderr for real-time progress while accumulating stdout
-        stderr_lines: list[str] = []
-        assert proc.stderr is not None
-        for line in proc.stderr:
-            stripped = line.rstrip("\n")
-            stderr_lines.append(stripped)
-            if stripped.startswith("progress:"):
-                logger.info("bobbin index %s", stripped)
-        stdout_text = proc.stdout.read() if proc.stdout else ""
-        proc.wait(timeout=timeout)
+        # Bound execution while draining BOTH pipes. Reading stderr to EOF
+        # before wait(timeout) let a running index exceed its whole budget.
+        stdout_text, stderr_text = proc.communicate(timeout=timeout)
+        stderr_lines = stderr_text.splitlines()
+        for line in stderr_lines:
+            if line.startswith("progress:"):
+                logger.info("bobbin index %s", line)
         if proc.returncode != 0:
             raise subprocess.CalledProcessError(
                 proc.returncode, proc.args,
@@ -203,7 +206,16 @@ def setup_bobbin(
     except subprocess.CalledProcessError as exc:
         raise BobbinSetupError(f"bobbin index failed: {exc.stderr.strip()}") from exc
     except subprocess.TimeoutExpired:
-        proc.kill()
+        if os.name == "posix":
+            # This PID is the session/group leader created above, never a
+            # shared shell or crew process group. Reap Git/index children too.
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        else:
+            proc.kill()
+        proc.communicate()
         raise BobbinSetupError(f"bobbin index timed out after {timeout}s")
     index_duration = time.monotonic() - t0
 
