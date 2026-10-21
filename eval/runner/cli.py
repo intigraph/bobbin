@@ -1843,6 +1843,7 @@ def l0(tasks_dir, task_ids, arms, budgets, out_path, workdir, index_timeout, reu
     cells = planned_cells(tasks, arm_list, budget_list)
     manifest["planned_cells"] = cells
     manifest["index_reuse"] = "sealed-no-coupling/v1" if reuse_model_dir else "legacy"
+    manifest["scoring_paths"] = "workspace-qualified-or-literal/v1" if reuse_model_dir else "literal"
     if reuse_limits is not None:
         manifest["resource_limits"] = reuse_limits
         manifest["wall_supervisor_required_seconds"] = 21600
@@ -1924,7 +1925,7 @@ def l0(tasks_dir, task_ids, arms, budgets, out_path, workdir, index_timeout, reu
                             target, Path(bobbin), reuse_model_dir, overrides, journal,
                             lambda a=arm, b=budget: L0.run_task(
                                 task, ws, [a], [b], bobbin, env, index,
-                                nocoupling_workspace=fork))
+                                nocoupling_workspace=fork, normalize_paths=True))
                     except Exception as exc:
                         # Preserve the explicit failure and all prior cells;
                         # remaining cells stay missing. No reset/resend follows.

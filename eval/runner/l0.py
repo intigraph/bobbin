@@ -668,6 +668,7 @@ def run_task(
     index_workspace: Callable[[Path, dict[str, str] | None], None],
     *,
     nocoupling_workspace: Path | None = None,
+    normalize_paths: bool = False,
 ) -> list[ArmScore]:
     """Score every (arm, budget) for one task on an already-checked-out workspace.
 
@@ -696,8 +697,10 @@ def run_task(
                 continue
             try:
                 chars = 0
+                scoring_workspace = workspace
                 if arm in ABLATIONS:
                     ws = nocoupling_ws if arm == "-coupling" else workspace
+                    scoring_workspace = ws
                     outcome, detail, chunks, chars = run_hook_arm(
                         ws, prompt, arm, budget, env, bobbin
                     )
@@ -715,6 +718,10 @@ def run_task(
                     outcome, detail = (
                         ("injected", "") if chunks else ("skipped", "baseline found nothing")
                     )
+                if normalize_paths:
+                    from runner.score_paths import workspace_chunks
+                    chunks = workspace_chunks(scoring_workspace, chunks)
+                if arm not in ABLATIONS:
                     chars = _chunk_chars(workspace, chunks)
             except Exception as exc:  # noqa: BLE001 -- recorded, never swallowed
                 base.outcome, base.detail = "error", f"{type(exc).__name__}: {exc}"[:300]
