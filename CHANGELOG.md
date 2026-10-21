@@ -21,6 +21,18 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.29.1](https://github.com/scbrown/bobbin/compare/v0.29.0...v0.29.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **eval:** bound L0 indexing and isolate sealed index reuse ([#202](https://github.com/scbrown/bobbin/issues/202)) ([9624689](https://github.com/scbrown/bobbin/commit/9624689e5eca15f198910201fd89ebf3afd1af9e))
+
+
+### Performance Improvements
+
+* **index:** batch repository file edge clears ([#205](https://github.com/scbrown/bobbin/issues/205)) ([e15b2c3](https://github.com/scbrown/bobbin/commit/e15b2c33ed67a83521350d81298ad4e24b924c8e))
+
 ## [0.29.0](https://github.com/scbrown/bobbin/compare/v0.28.0...v0.29.0) (2026-10-16)
 
 
