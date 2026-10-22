@@ -722,7 +722,7 @@ def run_task(
                     from runner.score_paths import workspace_chunks
                     chunks = workspace_chunks(scoring_workspace, chunks)
                 if arm not in ABLATIONS:
-                    chars = _chunk_chars(workspace, chunks)
+                    chars = _chunk_chars(workspace, chunks, strict=normalize_paths)
             except Exception as exc:  # noqa: BLE001 -- recorded, never swallowed
                 base.outcome, base.detail = "error", f"{type(exc).__name__}: {exc}"[:300]
                 results.append(base)
@@ -742,12 +742,14 @@ def run_task(
     return results
 
 
-def _chunk_chars(workspace: Path, chunks: list[Chunk]) -> int:
+def _chunk_chars(workspace: Path, chunks: list[Chunk], *, strict: bool = False) -> int:
     total = 0
     for path, s, e in chunks:
         try:
             lines = (workspace / path).read_text(errors="replace").splitlines()
-        except OSError:
+        except OSError as exc:
+            if strict:
+                raise ValueError("unreadable native chunk path") from exc
             continue
         total += sum(len(x) + 1 for x in lines[s - 1 : e])
     return total

@@ -123,3 +123,83 @@ def test_unreadable_alternative_does_not_make_a_path_unique(tmp_path):
         workspace_chunks(ws, [('repos/fixture/app.py', 1, 2)])
     alternative.unlink()
     assert workspace_chunks(ws, [('repos/fixture/app.py', 1, 2)]) == [('app.py', 1, 2)]
+
+
+@pytest.mark.skipif(getattr(os, 'geteuid', lambda: 0)() == 0,
+                    reason='POSIX non-root reads are required to prove permission refusal')
+@pytest.mark.parametrize('path', ['app.py', 'repos/fixture/app.py'])
+def test_unreadable_file_contents_are_refused_with_readable_positive(tmp_path, path):
+    ws = fixture(tmp_path)
+    source = ws / 'app.py'
+    raw = [(path, 1, 2)]
+    assert workspace_chunks(ws, raw) == [('app.py', 1, 2)]
+    try:
+        source.chmod(0)
+        with pytest.raises(PermissionError):
+            source.read_text()
+        with pytest.raises(ValueError, match='unreadable'):
+            workspace_chunks(ws, raw)
+    finally:
+        source.chmod(0o600)
+
+
+@pytest.mark.skipif(getattr(os, 'geteuid', lambda: 0)() == 0,
+                    reason='POSIX non-root reads are required to prove permission refusal')
+def test_unreadable_alternative_file_is_not_discarded(tmp_path):
+    ws = fixture(tmp_path)
+    other = ws / 'repos/fixture/app.py'
+    other.parent.mkdir(parents=True)
+    other.write_text('alternative source\n')
+    try:
+        other.chmod(0)
+        with pytest.raises(PermissionError):
+            other.read_text()
+        with pytest.raises(ValueError, match='unreadable'):
+            workspace_chunks(ws, [('repos/fixture/app.py', 1, 2)])
+    finally:
+        other.chmod(0o600)
+
+
+@pytest.mark.skipif(getattr(os, 'geteuid', lambda: 0)() == 0,
+                    reason='POSIX non-root reads are required to prove permission refusal')
+@pytest.mark.parametrize('late_failure', [False, True])
+def test_actual_driver_records_read_failure_as_error_only_in_opt_in(
+        tmp_path, monkeypatch, late_failure):
+    import runner.score_paths as paths
+
+    ws = fixture(tmp_path)
+    source = ws / 'app.py'
+    monkeypatch.setattr(l0, 'gold_for_commit', lambda *a: {'app.py': [(1, 2)]})
+    monkeypatch.setattr(l0, 'baseline_embed', lambda *a: [('repos/fixture/app.py', 1, 2)])
+    task = {'id': 'fixture', 'commit': 'unused', 'description': 'fixture'}
+    args = (task, ws, ['embed'], [100], 'not-executed', {}, lambda *a: None)
+    positive, = l0.run_task(*args, normalize_paths=True)
+    assert positive.outcome == 'injected' and positive.file_recall == 1
+    assert positive.injected_tokens == len('one\ntwo\n') // 4
+    original = paths.workspace_chunks
+
+    def revoke_after_mapping(*args):
+        mapped = original(*args)
+        source.chmod(0)
+        with pytest.raises(PermissionError):
+            source.read_text()
+        return mapped
+
+    try:
+        if late_failure:
+            monkeypatch.setattr(paths, 'workspace_chunks', revoke_after_mapping)
+        else:
+            source.chmod(0)
+            with pytest.raises(PermissionError):
+                source.read_text()
+        rejected, = l0.run_task(*args, normalize_paths=True)
+        assert rejected.outcome == 'error'
+        assert rejected.file_recall is None and rejected.hunk_recall is None
+        assert 'unreadable' in rejected.detail
+        # Retain historical literal scoring and permissive character accounting.
+        monkeypatch.setattr(l0, 'baseline_embed', lambda *a: [('app.py', 1, 2)])
+        legacy, = l0.run_task(*args)
+        assert legacy.outcome == 'injected' and legacy.file_recall == 1
+        assert legacy.injected_tokens == 0
+    finally:
+        source.chmod(0o600)

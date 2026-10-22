@@ -39,6 +39,11 @@ def workspace_chunks(workspace: Path, chunks: list[tuple[str, int, int]]) -> lis
                 if stat.S_ISLNK(metadata.st_mode):
                     raise ValueError("linked native chunk path")
             if metadata is not None and stat.S_ISREG(metadata.st_mode):
+                try:
+                    with target.open("rb") as contents:
+                        contents.read(1)
+                except OSError as exc:
+                    raise ValueError("unreadable native chunk path") from exc
                 candidates.add(name)
         if len(candidates) != 1:
             raise ValueError("unknown or ambiguous native chunk path")
