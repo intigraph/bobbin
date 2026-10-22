@@ -35,7 +35,7 @@
       "source": "src/mcp/server.rs",
       "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fmcp%2Fserver.rs",
       "summary": "The MCP server advertises the tool interface; defining source is the authority for tool names, inputs and feature conditions.",
-      "source_sha256": "458d3aeb36836d48788e1be3653a2e6ac515d55ea64bf07ddc388a22a79fa4c3",
+      "source_sha256": "80696a61fd9220297d45e3ac65f791a18911de0db0add6b0030cec4dd76c443f",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "Bobbin MCP tools"
@@ -109,7 +109,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/bobbin/README.md",
       "summary": "Start with installation and the first successful search, then read architecture and contributor guidance.",
-      "source_sha256": "77189862c0136aad56cfb5407ebb7ae99e913f6823105ffc146217a54653686d",
+      "source_sha256": "8c2e3973751a8dd7e983cd1a35174b098d5c39bcf74146cd07114d718337737c",
       "properties": {
         "startHereOrder": "1"
       }
