@@ -272,15 +272,23 @@ impl BobbinMcpServer {
     fn read_file_lines(
         &self,
         file: &str,
+        repo: Option<&str>,
         start: u32,
         end: u32,
         context: u32,
     ) -> Result<(String, u32, u32)> {
-        let file_path = self.repo_root.join(file);
-
-        if !file_path.exists() {
-            anyhow::bail!("File not found: {}", file);
-        }
+        let config_path = Config::config_path(&self.repo_root);
+        let config = if config_path.exists() {
+            Config::load(&config_path)?
+        } else {
+            Config::default()
+        };
+        let file_path = crate::read_path::resolve_read_path(
+            &self.repo_root,
+            file,
+            repo,
+            config.server.repo_path_prefix.as_deref(),
+        )?;
 
         let content = std::fs::read_to_string(&file_path)
             .with_context(|| format!("Failed to read file: {}", file))?;
@@ -1352,7 +1360,13 @@ impl BobbinMcpServer {
         let context = req.context.unwrap_or(0);
 
         let (content, actual_start, actual_end) = self
-            .read_file_lines(&req.file, req.start_line, req.end_line, context)
+            .read_file_lines(
+                &req.file,
+                req.repo.as_deref(),
+                req.start_line,
+                req.end_line,
+                context,
+            )
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
         let response = ReadChunkResponse {
@@ -3510,3 +3524,7 @@ pub async fn run_http_server(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "read_path_contract_tests.rs"]
+mod read_path_contract_tests;

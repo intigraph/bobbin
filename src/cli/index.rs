@@ -836,11 +836,11 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
     vector_store.clear_absolute_path_chunk_edges().await?;
     // Clear before insert for every re-parsed file — including files that
     // emitted zero edges this run.
-    for file in &edge_clear_files {
-        vector_store
-            .clear_file_chunk_edges(file, Some(repo_name))
-            .await?;
-    }
+    let mut edge_clear_files: Vec<_> = edge_clear_files.into_iter().collect();
+    edge_clear_files.sort();
+    vector_store
+        .clear_files_chunk_edges(&edge_clear_files, Some(repo_name))
+        .await?;
     if !all_chunk_edges.is_empty() {
         let edge_count = all_chunk_edges.len();
         vector_store
