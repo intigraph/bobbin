@@ -258,7 +258,7 @@ class Knowledge(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "freshness"):
             self.render()
         self.registry["max_age_seconds"] = 30
-        self.registry["records"][0]["summary"] = "read /home/private/file"
+        self.registry["records"][0]["summary"] = "read /home/user/file"
         self.save()
         with self.assertRaisesRegex(ValueError, "private summary"):
             self.render()
