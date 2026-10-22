@@ -21,6 +21,7 @@ mod operational_metrics;
 /// asked for) — what makes retrieval cumulative rather than per-prompt.
 pub mod plate;
 pub mod reactions;
+mod read_path;
 mod search;
 mod storage;
 pub mod tags;

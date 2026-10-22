@@ -105,11 +105,13 @@ fn context_carries_every_field() {
 #[test]
 fn read_chunk_carries_every_field() {
     let p = read_chunk_params(&ReadChunkRequest {
+        repo: Some("alpha".into()),
         file: "src/main.rs".into(),
         start_line: 10,
         end_line: 42,
         context: Some(3),
     });
+    assert_eq!(p.get("repo"), Some("alpha"));
     assert_eq!(p.get("file"), Some("src/main.rs"));
     assert_eq!(p.get("start_line"), Some("10"));
     assert_eq!(p.get("end_line"), Some("42"));
@@ -296,4 +298,14 @@ fn feedback_params_carry_every_field() {
     assert_eq!(p.get("bead"), Some("aegis-wbbycq"));
     assert_eq!(p.get("commit_hash"), Some("deadbeef"));
     assert_eq!(p.get("limit"), Some("2"));
+}
+
+#[test]
+fn read_chunk_without_repo_remains_compatible() {
+    let req: ReadChunkRequest = serde_json::from_value(serde_json::json!({
+        "file": "repos/alpha/src/main.rs", "start_line": 1, "end_line": 5
+    }))
+    .unwrap();
+    assert!(req.repo.is_none());
+    assert_eq!(read_chunk_params(&req).get("repo"), None);
 }
