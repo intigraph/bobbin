@@ -155,10 +155,19 @@ Read a specific section of code from a file by line range.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `file` | string | yes | — | File path relative to repo root |
+| `file` | string | yes | — | Repository-relative or workspace-relative file path |
+| `repo` | string | no | — | Repository name from the search result; required for ambiguous relative paths |
 | `start_line` | integer | yes | — | Starting line number |
 | `end_line` | integer | yes | — | Ending line number |
 | `context` | integer | no | 0 | Context lines to include before and after |
+
+For a search result, pass its repository as `repo` and its relative path as
+`file`. Existing workspace paths such as `repos/alpha/src/main.rs` still work
+without `repo`. When `repo` is omitted, an existing workspace-relative file
+takes precedence; otherwise exactly one match under the configured repository
+prefix (default: `repos/`) is required. Multiple matches refuse and list the
+repository names so the caller can choose explicitly. Missing files and unknown
+repositories refuse with guidance; no index rebuild is performed.
 
 **Response fields:** `file`, `start_line`, `end_line`, `actual_start_line`, `actual_end_line`, `content`, `language`
 
