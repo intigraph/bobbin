@@ -455,3 +455,17 @@ rows remain literal and untouched. Arms, budgets, tasks, gold exclusions, target
 metrics and statistical tests are unchanged. Any new campaign must retain this
 instrumentation identity and cannot silently pool its corrected rows with the
 prior partial run.
+
+### 2026-10-23: opt-in independent hook outcome contract
+
+Before any further campaign, sealed reuse records
+`hook_outcomes=independent-hook-outcomes/v1`. It retains per-cell state isolation
+and qualified-path scoring, and refuses dedup/reducing contamination, unsupported
+or contradictory output and unexplained silence as errors with null efficacy
+metrics. Exactly stated operational-intent and semantic-gate non-injections stay
+skips; rounded printed gate values are not treated as exact latent scores.
+Legacy outcomes and the original partial rows are unchanged. This is an
+instrument amendment, not permission to run, a new result, a resource increase
+or a changed model/chunker decision. See
+[`l0-outcome-contract.md`](../../docs/eval/l0-outcome-contract.md) for the outcome
+family dispositions and the native-enrollment/aggregate-storage acceptance gates.
