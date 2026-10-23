@@ -21,6 +21,25 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.30.0](https://github.com/intigraph/bobbin/compare/v0.29.0...v0.30.0) (2026-10-23)
+
+
+### Features
+
+* publish repository-owned pointer pendants ([#200](https://github.com/intigraph/bobbin/issues/200)) ([66d2d62](https://github.com/intigraph/bobbin/commit/66d2d6251cc9f577444f5013e0eba9588c9a2e38))
+
+
+### Bug Fixes
+
+* **eval:** bound L0 indexing and isolate sealed index reuse ([#202](https://github.com/intigraph/bobbin/issues/202)) ([9624689](https://github.com/intigraph/bobbin/commit/9624689e5eca15f198910201fd89ebf3afd1af9e))
+* **eval:** qualify sealed L0 scoring paths per arm workspace ([#204](https://github.com/intigraph/bobbin/issues/204)) ([3d9073b](https://github.com/intigraph/bobbin/commit/3d9073b41ca6dffc15583852a74911f20396d29a))
+* **mcp:** resolve repository-relative chunk reads ([#208](https://github.com/intigraph/bobbin/issues/208)) ([e3296e0](https://github.com/intigraph/bobbin/commit/e3296e04dd7644b8b55f2b1d4c8aea6900a6009a))
+
+
+### Performance Improvements
+
+* **index:** batch repository file edge clears ([#205](https://github.com/intigraph/bobbin/issues/205)) ([e15b2c3](https://github.com/intigraph/bobbin/commit/e15b2c33ed67a83521350d81298ad4e24b924c8e))
+
 ## [0.29.0](https://github.com/scbrown/bobbin/compare/v0.28.0...v0.29.0) (2026-10-16)
 
 
