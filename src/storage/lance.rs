@@ -2853,23 +2853,6 @@ impl VectorStore {
         Ok(())
     }
 
-    /// Clear chunk edges for a specific file, optionally scoped to one repo
-    pub async fn clear_file_chunk_edges(&self, file_path: &str, repo: Option<&str>) -> Result<()> {
-        let table = match &self.chunk_edges_table {
-            Some(t) => t,
-            None => return Ok(()),
-        };
-
-        let mut filter = format!("file_path = '{}'", file_path.replace('\'', "''"));
-        if let Some(r) = repo {
-            filter.push_str(&format!(" AND repo = '{}'", r.replace('\'', "''")));
-        }
-        retry_on_conflict!(table, table.delete(&filter))
-            .context("Failed to clear file chunk edges")?;
-
-        Ok(())
-    }
-
     /// Get chunk edge statistics: total edges by type
     pub async fn get_chunk_edge_stats(&self) -> Result<Vec<(String, u64)>> {
         let table = match &self.chunk_edges_table {
@@ -3330,3 +3313,10 @@ use fts::should_rebuild_fts_after;
 #[cfg(test)]
 #[path = "lance_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "lance_edge_tests.rs"]
+mod edge_tests;
+
+#[path = "lance_edges.rs"]
+mod edges;

@@ -1,0 +1,4 @@
+{"version": 2, "width": 120, "height": 24, "title": "Native serial and batched edge deletion"}
+[0.023817, "o", "Identical synthetic Lance inputs; no production index or model.\r\n$ just --command cargo test --features knowledge batched_edge_clear -- --nocapture\r\n"]
+[40.082572, "o", "{\"batch_delete_commits\": 2, \"batch_seconds\": 0.012851057, \"files\": 17, \"fixture_only\": true, \"remaining\": 18, \"rows_equal\": true, \"serial_delete_commits\": 18, \"serial_seconds\": 0.154340862}\r\n{\"batch_delete_commits\": 4, \"batch_seconds\": 0.032183601, \"files\": 205, \"fixture_only\": true, \"remaining\": 206, \"rows_equal\": true, \"serial_delete_commits\": 206, \"serial_seconds\": 2.033767881}\r\n"]
+[40.082575999999996, "o", "Full payload/repo parity and empty/missing-table/unscoped controls passed.\r\n"]

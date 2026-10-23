@@ -87,6 +87,7 @@ pub(super) fn context_params(req: &ContextRequest) -> Params {
 
 pub(super) fn read_chunk_params(req: &ReadChunkRequest) -> Params {
     Params::new()
+        .opt_str("repo", &req.repo)
         .set("file", &req.file)
         .set("start_line", req.start_line)
         .set("end_line", req.end_line)
