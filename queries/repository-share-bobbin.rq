@@ -48,6 +48,19 @@ WHERE {
   }
   UNION
   {
+    # The public publication-policy catalogue the receiver verifier requires.
+    # Only reviewed public rule IRIs and their label/regex/tier; a rule IRI that
+    # also appears in the producer's private policy graph is left out entirely,
+    # so a private regex can never ride along and the receiver fails closed.
+    ?s a aegis:InternalIdentifierPattern ; ?p ?o .
+    FILTER(STRSTARTS(STR(?s), "https://quipu.dev/knowledge/publication-policy/"))
+    VALUES ?p { rdf:type rdfs:label aegis:regex aegis:enforcementTier }
+    FILTER NOT EXISTS {
+      GRAPH <urn:quipu:private-release-policy> { ?s ?privatePredicate ?privateValue }
+    }
+  }
+  UNION
+  {
     VALUES ?s {
       aegis:repo_bobbin
       aegis:repo-embedded-knowledge-databases-directive-2026-09-03

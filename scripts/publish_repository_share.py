@@ -23,6 +23,7 @@ MEMBERS = {
     "manifest.ttl",
     "shapes.ttl",
     "queries.ttl",
+    "alignments.ttl",
 }
 
 
@@ -53,7 +54,19 @@ def check_share(stage):
     ):
         if not (stage / name).is_file() or not (stage / name).stat().st_size:
             raise ValueError("required nonempty share member missing: " + name)
-    recipe = json.loads((stage / "manifest.json").read_text()).get("embedding")
+    manifest = json.loads((stage / "manifest.json").read_text())
+    # A native engine with --alignments carries the reviewed file; it is only
+    # admitted when the manifest declares it and binds its exact bytes.
+    carried = stage / "alignments.ttl"
+    declared = manifest.get("files", {}).get("alignments")
+    if carried.exists() or declared is not None or "alignments_hash" in manifest:
+        if (
+            declared != "alignments.ttl"
+            or not carried.is_file()
+            or manifest.get("alignments_hash") != "sha256:" + digest(carried)
+        ):
+            raise ValueError("alignments member is undeclared, missing or not hash-bound")
+    recipe = manifest.get("embedding")
     if (
         not isinstance(recipe, dict)
         or not isinstance(recipe.get("model"), str)

@@ -5,7 +5,7 @@
 """
 from pathlib import Path
 import unittest
-from rdflib import Graph, Literal, Namespace, RDF, RDFS, URIRef
+from rdflib import Dataset, Graph, Literal, Namespace, RDF, RDFS, URIRef
 
 A = Namespace('http://aegis.gastown.local/ontology/')
 CODE = Namespace(str(A) + 'code/bobbin/')
@@ -63,6 +63,38 @@ class RepositoryQuery(unittest.TestCase):
         for triple in expected: source.add(triple)
         source.add((pointer, OWL.sameAs, other))
         self.assertEqual(set(source.query(QUERY).graph), expected)
+
+    def test_public_policy_catalogue_survives_and_private_policy_does_not(self):
+        POLICY = 'https://quipu.dev/knowledge/publication-policy/'
+        public = Graph()
+        for name in ('access-tokens', 'private-keys', 'user-directories', 'demo-private-domain'):
+            rule = URIRef(POLICY + name)
+            public.add((rule, RDF.type, A.InternalIdentifierPattern))
+            public.add((rule, RDFS.label, Literal(name + ' label')))
+            public.add((rule, A.regex, Literal(name + '-pattern')))
+            public.add((rule, A.enforcementTier, Literal('block')))
+        rules = set(public.subjects(RDF.type, A.InternalIdentifierPattern))
+        source = Dataset(default_union=True)
+        for triple in public:
+            source.add(triple)
+        shadowed = URIRef(POLICY + 'private-keys')
+        private = source.graph(URIRef('urn:quipu:private-release-policy'))
+        # A private rule, and a private regex attached to a public rule IRI.
+        private.add((URIRef(POLICY + 'internal-hosts'), RDF.type, A.InternalIdentifierPattern))
+        private.add((URIRef(POLICY + 'internal-hosts'), A.regex, Literal('corp[.]internal')))
+        private.add((shadowed, A.regex, Literal('secret-host-name')))
+        # A public rule IRI cannot carry an unreviewed predicate.
+        source.add((URIRef(POLICY + 'access-tokens'), RDFS.comment, Literal('extra')))
+        result = set(source.query(QUERY).graph)
+        expected = {
+            t for t in public
+            if t[0] != shadowed and t[1] in (RDF.type, RDFS.label, A.regex, A.enforcementTier)
+        }
+        self.assertEqual(result, expected)
+        self.assertEqual(
+            {s for s, _, _ in result}, rules - {shadowed}
+        )
+        self.assertFalse(any('secret-host-name' in str(o) or 'corp' in str(o) for _, _, o in result))
 
     def test_empty_is_empty_with_populated_positive(self):
         self.assertEqual(len(Graph().query(QUERY).graph), 0)

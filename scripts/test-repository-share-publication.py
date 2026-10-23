@@ -88,6 +88,50 @@ class Publication(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "provider-byte"):
             publisher.check_share(self.stage)
 
+    def carry_alignments(self, data=b"# reviewed empty alignment carrier\n"):
+        (self.stage / "alignments.ttl").write_bytes(data)
+        manifest = json.loads((self.stage / "manifest.json").read_text())
+        manifest["files"] = {"alignments": "alignments.ttl"}
+        manifest["alignments_hash"] = "sha256:" + publisher.digest(
+            self.stage / "alignments.ttl"
+        )
+        (self.stage / "manifest.json").write_text(json.dumps(manifest))
+        return manifest
+
+    def test_declared_hash_bound_alignments_publish_and_read_back(self):
+        self.carry_alignments()
+        publisher.check_share(self.stage)
+        self.prepare()
+        self.assertEqual(
+            verifier.verify(self.root, "v1.2.3", self.revision)["source_revision"],
+            self.revision,
+        )
+
+    def test_undeclared_missing_corrupt_or_symlinked_alignments_refuse(self):
+        manifest = self.carry_alignments()
+        cases = {}
+        undeclared = dict(manifest)
+        del undeclared["files"], undeclared["alignments_hash"]
+        cases["undeclared"] = (undeclared, b"# reviewed empty alignment carrier\n")
+        cases["corrupt"] = (manifest, b"# altered bytes\n")
+        cases["missing"] = (manifest, None)
+        for name, (declared, data) in cases.items():
+            with self.subTest(case=name):
+                (self.stage / "manifest.json").write_text(json.dumps(declared))
+                carried = self.stage / "alignments.ttl"
+                carried.unlink(missing_ok=True)
+                if data is not None:
+                    carried.write_bytes(data)
+                with self.assertRaisesRegex(ValueError, "alignments member"):
+                    publisher.check_share(self.stage)
+        target = self.root / "outside.ttl"
+        target.write_bytes(b"# reviewed empty alignment carrier\n")
+        (self.stage / "manifest.json").write_text(json.dumps(manifest))
+        (self.stage / "alignments.ttl").unlink(missing_ok=True)
+        (self.stage / "alignments.ttl").symlink_to(target)
+        with self.assertRaisesRegex(ValueError, "unexpected or non-regular"):
+            publisher.check_share(self.stage)
+
     def test_text_line_span_and_private_members_refuse(self):
         for predicate in ("content", "startLine", "endLine"):
             (self.stage / "export.nt").write_text(
