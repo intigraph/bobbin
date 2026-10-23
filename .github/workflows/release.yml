@@ -660,7 +660,7 @@ jobs:
           dry-run: 'false'
 
   repository-pendant:
-    name: Verify repository pendant
+    name: Repository pendant admission and readback
     needs: [release-please, release]
     if: always() && needs.release.result == 'success'
     runs-on: ubuntu-22.04
@@ -670,11 +670,16 @@ jobs:
     env:
       VERSION: ${{ inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || needs.release-please.outputs.tag_name }}
       GH_TOKEN: ${{ github.token }}
+      TRUSTED_REPOSITORY_SHARE_ENABLED: ${{ vars.TRUSTED_REPOSITORY_SHARE_ENABLED }}
     steps:
       - name: Checkout exact published source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: refs/tags/${{ env.VERSION }}
           fetch-depth: 0
+      - name: Report trusted publisher admission
+        id: publisher
+        run: python3 scripts/verify-repository-share.py --admission
       - name: Require repository-owned trusted-host pendant
+        if: steps.publisher.outputs.admitted == 'true'
         run: python3 scripts/verify-repository-share.py "$VERSION" "$(git rev-parse HEAD)"

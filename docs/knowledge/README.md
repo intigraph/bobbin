@@ -21,8 +21,18 @@ record may produce derived identity through the engine's existing apply path.
 The current source profile deliberately does not import arbitrary nonempty
 mapping data until an actual curated artifact and its transport are reviewed.
 
-The copied release workflow verifies the three public assets only after the
-ordinary release finishes. The managed trusted host runs this repository's own
+The release workflow always reports publisher admission after the ordinary
+release finishes. Only the exact repository variable
+`TRUSTED_REPOSITORY_SHARE_ENABLED=true` admits the bounded public readback.
+Unset, empty or `false` reports `NOT_ADMITTED` without downloading or waiting;
+malformed values fail. This is not a verified pendant or a publication success.
+When admitted, absent assets still exhaust the bounded wait and fail, and the
+archive, checksum and exact source/tag provenance checks remain mandatory.
+
+The variable attests an independently configured trusted producer; it does not
+enable one. Keep it unset until the reviewed producer configuration and pins
+are actually installed. No publication, credential or admission change is made
+by this source correction. The managed trusted host runs this repository's own
 publisher, keeps its publication policy private, pins both native engine
 executables and the indexer, and refuses retained uncertain upload outcomes.
 Default configuration still publishes only the existing Quipu corpus. Enabling
