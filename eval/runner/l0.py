@@ -37,6 +37,7 @@ from typing import Any
 
 DEFAULT_BUDGET = 300
 SEED = 20260924
+INDEPENDENT_HOOK_CONTRACT = "independent-hook-outcomes/v1"
 BOOTSTRAP_RESAMPLES = 10_000
 
 # Shipped defaults every calibration-driven arm starts from (src/config.rs).
@@ -145,16 +146,41 @@ def parse_injected_chunks(text: str) -> list[Chunk]:
     return chunks
 
 
-def classify_hook_result(returncode: int, stdout: str, stderr: str) -> tuple[str, str]:
+def classify_hook_result(
+    returncode: int, stdout: str, stderr: str, *, independent: bool = False
+) -> tuple[str, str]:
     """(outcome, detail). See the module docstring for why stderr decides."""
     for line in stderr.splitlines():
         if line.startswith("bobbin inject-context"):
             return "error", line.strip()
     if returncode != 0:
         return "error", f"exit {returncode}: {stderr.strip()[:300]}"
+    reasons = [ln.strip() for ln in stderr.splitlines() if ln.startswith("bobbin: skipped")]
+    if independent:
+        # --no-dedup does not disable the frozen runtime's reducing ledger.
+        # Cell isolation should prevent this; observing it is invalid evidence.
+        if "previously injected" in stderr or any(
+            "session unchanged" in reason for reason in reasons
+        ):
+            return "error", "independent cell observed session-state contamination"
+        if reasons and stdout.strip():
+            return "error", "independent cell produced both context and a skip reason"
+        if not stdout.strip():
+            if len(reasons) != 1:
+                return "error", "independent cell has no unique explicit skip reason"
+            reason = reasons[0]
+            if reason == "bobbin: skipped (operational intent: Operational)":
+                return "skipped", reason
+            gate = re.fullmatch(
+                r"bobbin: skipped \(semantic=(-?\d+\.\d+) < gate=(-?\d+\.\d+)\)", reason
+            )
+            # The runtime prints rounded scores: equality can still mean the
+            # unrounded score was below the gate. Never reject that rounding.
+            if gate and float(gate[1]) <= float(gate[2]):
+                return "skipped", reason
+            return "error", "independent cell has an unsupported or inconsistent skip reason"
     if parse_injected_chunks(stdout):
         return "injected", ""
-    reasons = [ln.strip() for ln in stderr.splitlines() if ln.startswith("bobbin: skipped")]
     if reasons:
         return "skipped", reasons[0]
     if stdout.strip():
@@ -304,6 +330,7 @@ def run_hook_arm(
     bobbin: str,
     *,
     timeout: int = 180,
+    independent: bool = False,
 ) -> tuple[str, str, list[Chunk], int]:
     spec = ABLATIONS[arm]
     write_calibration(workspace, spec.get("calibration", {}))
@@ -334,7 +361,9 @@ def run_hook_arm(
         )
     except subprocess.TimeoutExpired:
         return "error", f"timeout after {timeout}s", [], 0
-    outcome, detail = classify_hook_result(r.returncode, r.stdout, r.stderr)
+    outcome, detail = classify_hook_result(
+        r.returncode, r.stdout, r.stderr, independent=independent
+    )
     chunks = parse_injected_chunks(r.stdout) if outcome == "injected" else []
     return outcome, detail, chunks, len(r.stdout)
 
@@ -669,6 +698,7 @@ def run_task(
     *,
     nocoupling_workspace: Path | None = None,
     normalize_paths: bool = False,
+    strict_hook_contract: bool = False,
 ) -> list[ArmScore]:
     """Score every (arm, budget) for one task on an already-checked-out workspace.
 
@@ -702,8 +732,13 @@ def run_task(
                     ws = nocoupling_ws if arm == "-coupling" else workspace
                     scoring_workspace = ws
                     outcome, detail, chunks, chars = run_hook_arm(
-                        ws, prompt, arm, budget, env, bobbin
+                        ws, prompt, arm, budget, env, bobbin,
+                        **({"independent": True} if strict_hook_contract else {}),
                     )
+                    if strict_hook_contract and outcome == "error":
+                        base.detail = detail
+                        results.append(base)
+                        continue
                 else:
                     if arm == "rg":
                         chunks = baseline_rg(workspace, prompt, budget)
