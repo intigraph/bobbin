@@ -1,0 +1,138 @@
+{
+  "source_revision": "b036433f55b75ddb8520d5bf4ad0b681464187eb",
+  "reviewed_at": "2026-10-20T22:30:00Z",
+  "max_age_seconds": 2592000,
+  "records": [
+    {
+      "kind": "idea",
+      "source": "docs/book/src/architecture/overview.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/bobbin/docs%2Fbook%2Fsrc%2Farchitecture%2Foverview.md#architecture-overview",
+      "summary": "Bobbin keeps code context local: structural parsing supplies file and symbol pointers, local embeddings supply semantic retrieval, and temporal coupling supplies change context.",
+      "source_sha256": "e44cb5a7fa67f01057da8566424a168abde6ce642b7c918baa785365d6805eb7",
+      "type": "Concept"
+    },
+    {
+      "kind": "idea",
+      "source": "docs/book/src/architecture/overview.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/bobbin/docs%2Fbook%2Fsrc%2Farchitecture%2Foverview.md#query-pipeline",
+      "summary": "Search combines semantic and keyword retrieval; context assembly adds related files rather than treating a search hit as the complete task context.",
+      "source_sha256": "e44cb5a7fa67f01057da8566424a168abde6ce642b7c918baa785365d6805eb7",
+      "type": "Concept"
+    },
+    {
+      "kind": "interface",
+      "source": "src/cli/mod.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fcli%2Fmod.rs",
+      "summary": "The Commands enum defines the public command surface, including search, context and portable index pack operations.",
+      "source_sha256": "21c85d361c229d3c536c329ee4cb43ff8eb2b0679e4663ea2e5cd32a10fc5577",
+      "properties": {
+        "interfaceKind": "CLI",
+        "publicName": "bobbin Commands enum"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "src/mcp/server.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fmcp%2Fserver.rs",
+      "summary": "The MCP server advertises the tool interface; defining source is the authority for tool names, inputs and feature conditions.",
+      "source_sha256": "80696a61fd9220297d45e3ac65f791a18911de0db0add6b0030cec4dd76c443f",
+      "properties": {
+        "interfaceKind": "MCP",
+        "publicName": "Bobbin MCP tools"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "src/http/mod.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fhttp%2Fmod.rs",
+      "summary": "The HTTP module defines the public REST service and route composition; it is distinct from the stdio MCP transport.",
+      "source_sha256": "24b6cc34852c375938cc9db7c35a77db3d8655935e80b4ad2946015eec7f4d6b",
+      "properties": {
+        "interfaceKind": "REST",
+        "publicName": "Bobbin HTTP service"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "src/config.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fconfig.rs",
+      "summary": "Configuration types define keys and defaults, including embedding.backend, embedding.model and embedding.batch_size.",
+      "source_sha256": "cf69c283d9af17e4ccd1b9181dc6673b48cd4e7c7b7394bf4ba13af7c61958b0",
+      "properties": {
+        "interfaceKind": "config",
+        "publicName": "Bobbin configuration types"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "src/cli/pack.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fcli%2Fpack.rs",
+      "summary": "Portable Bobbin index packs are a separate file format from Quipu repository pendants; pack operations are defined here.",
+      "source_sha256": "40afc73061ad6af9564df14d5ebdf2274d71c3e42101dec937c74cd9222f0406",
+      "properties": {
+        "interfaceKind": "file-format",
+        "publicName": "Bobbin portable index pack"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "src/knowledge/mod.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fknowledge%2Fmod.rs",
+      "summary": "The optional knowledge feature integrates with the Quipu crate. This dependency is not an identity assertion between the two repositories.",
+      "source_sha256": "fc41f9d18e06107ea72c335cc4b9fbd4114a8fc7dcb785f5e4eaa177d76a897c",
+      "properties": {
+        "interfaceKind": "library",
+        "publicName": "Optional Quipu knowledge integration"
+      },
+      "depends_on": [
+        "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs"
+      ]
+    },
+    {
+      "kind": "decision",
+      "source": "CONTRIBUTING.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/bobbin/CONTRIBUTING.md#feature-integration-checklist",
+      "summary": "New retrieval signals must be considered for context assembly and its MCP and CLI interfaces. The published contributor checklist is the source of this active guidance.",
+      "source_sha256": "791ee33f6bc3f9dd9ca7248e2b19b4a154f1853ac1b4e2e14ab1d1b959bd7e5e",
+      "type": "DecisionRecord",
+      "properties": {
+        "status": "active",
+        "supersessionStatus": "not-recorded-in-source",
+        "glossaryTerm": "Decision"
+      },
+      "see_also": [
+        "https://scbrown.github.io/quechua/ns#Decision"
+      ]
+    },
+    {
+      "kind": "start-here",
+      "source": "README.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/bobbin/README.md",
+      "summary": "Start with installation and the first successful search, then read architecture and contributor guidance.",
+      "source_sha256": "8c2e3973751a8dd7e983cd1a35174b098d5c39bcf74146cd07114d718337737c",
+      "properties": {
+        "startHereOrder": "1"
+      }
+    },
+    {
+      "kind": "start-here",
+      "source": "docs/book/src/architecture/overview.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/bobbin/docs%2Fbook%2Fsrc%2Farchitecture%2Foverview.md",
+      "summary": "Read the architecture overview for the indexing, search and optional knowledge graph boundaries.",
+      "source_sha256": "e44cb5a7fa67f01057da8566424a168abde6ce642b7c918baa785365d6805eb7",
+      "properties": {
+        "startHereOrder": "2"
+      }
+    },
+    {
+      "kind": "start-here",
+      "source": "CONTRIBUTING.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/bobbin/CONTRIBUTING.md",
+      "summary": "Read contributor gates and the feature integration checklist before changing retrieval behavior.",
+      "source_sha256": "791ee33f6bc3f9dd9ca7248e2b19b4a154f1853ac1b4e2e14ab1d1b959bd7e5e",
+      "properties": {
+        "startHereOrder": "3"
+      }
+    }
+  ]
+}

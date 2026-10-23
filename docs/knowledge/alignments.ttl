@@ -1,0 +1,6 @@
+# SSSOM/RDF carrier: explicitly no approved Bobbin cross-stack mappings.
+# This is an empty mapping graph, not an absent/corrupt input or a claim that
+# no mappings exist anywhere. Candidate records require the existing curator
+# path before publication as accepted mappings. Dependencies remain dependencies.
+@prefix sssom: <https://w3id.org/sssom/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
