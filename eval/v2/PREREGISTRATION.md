@@ -438,3 +438,20 @@ a separate decision.
 **Cost bound.** At most 20 Jev calls per task per set: 40 tasks x 2 sets x 20 = 1,600 calls,
 measured at ~0.4 s and ~300 input tokens for a one-line passage (up to ~120 lines per passage
 here).
+
+## L0 path instrumentation correction (2026-10-21)
+
+The bounded-index opt-in runner records `scoring_paths:
+workspace-qualified-or-literal/v1`. The frozen native hook can emit
+`repos/<repository-label>/<path>`, while Git gold uses repository-relative paths.
+Literal comparison reports zero overlap for the same source file. Opt-in scoring
+resolves a chunk only when exactly one existing, nonlinked workspace file matches
+its literal path or the exact current workspace-label prefix removed. Unknown,
+ambiguous, foreign-only or unsafe paths produce an explicit error, not a zero
+score. It never searches by basename, gold membership, suffix or another repo.
+The mapping applies equally to native baseline results and hook results; raw
+hook character/token accounting is unchanged. The legacy runner and all retained
+rows remain literal and untouched. Arms, budgets, tasks, gold exclusions, target
+metrics and statistical tests are unchanged. Any new campaign must retain this
+instrumentation identity and cannot silently pool its corrected rows with the
+prior partial run.
