@@ -124,10 +124,28 @@ Rollback: revert the source commit, retain all immutable prior/new results, and
 do not reinterpret a partial run as complete. No production indexing, release,
 resource increase, timer or service change is part of this source delivery.
 
-A separate scoring caveat remains: the retained native hook emits repository-
+A paired scoring probe found that the retained native hook emits repository-
 qualified paths such as `repos/fixture/app.py`, while the existing scorer matches
-paths literally against Git-relative gold paths. This source change preserves
-that scorer contract and the original scores; the private hook-equivalence
-controls compare native chunks directly, not claimed recall improvements. Path
-normalization and any resulting study interpretation require explicit paired
-scorer controls before full-cohort quality acceptance.
+paths literally against Git-relative gold paths. Legacy scoring and original
+scores stay unchanged; the private hook-equivalence controls compare native
+chunks directly, not claimed recall improvements. The opt-in correction below
+is paired against those same chunks before any full-cohort interpretation.
+
+The opt-in scorer now resolves that path caveat with exact workspace ownership:
+only a literal existing file or the exact current `repos/<workspace-name>/`
+prefix can match. Exactly one nonlinked candidate is required. Ambiguity,
+unknown/foreign-only paths and traversal refuse as an error. No gold-dependent
+matching is used; normalization is applied before baseline character counting,
+while actual hook character accounting is preserved. The manifest records
+`workspace-qualified-or-literal/v1`; legacy scoring and old rows stay unchanged.
+The paired private instrument probe checks the same retained actual native chunks,
+and driver controls verify recall 0 before versus 1 with the opt-in mapping.
+This repairs interpretation of paths, not a measured improvement in retrieval.
+
+Path qualification uses the workspace that produced the current arm’s chunks.
+The no-coupling copy is checked independently: an original-workspace file cannot
+satisfy a missing derived-workspace file, even when both directories share a name.
+
+An unreadable candidate is an explicit error, not evidence of absence. Strict
+metadata reads refuse instead of treating an inaccessible alternative as a
+unique path match.

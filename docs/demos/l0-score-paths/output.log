@@ -1,0 +1,7 @@
+Script started on 2026-10-20 23:26:32-04:00 [COMMAND="stty -onlcr; python3 docs/demos/l0-score-paths/probe.py" <not executed on terminal>]
+Before (legacy literal paths): file_recall=0.0
+After (opt-in exact workspace mapping): file_recall=1.0
+Foreign-only path: REFUSED (unknown or ambiguous native chunk path)
+Original literal scoring unchanged; synthetic instrument only, no retrieval/campaign
+
+Script done on 2026-10-20 23:26:32-04:00 [COMMAND_EXIT_CODE="0"]
