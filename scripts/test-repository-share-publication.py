@@ -249,10 +249,71 @@ class Publication(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "bounded"):
             verifier.wait(
-                "v1.2.3", self.revision, attempts=2, pause=pauses.append, run=run
+                "v1.2.3", self.revision, attempts=2, pause=pauses.append, run=run, admitted=True
             )
         self.assertEqual(len(calls), 2)
         self.assertEqual(pauses, [30])
+
+    def test_unadmitted_release_makes_no_read_or_wait(self):
+        def forbidden(*args, **kwargs):
+            self.fail("unadmitted release attempted a read or pause")
+
+        result = verifier.wait("v1.2.3", self.revision, run=forbidden, pause=forbidden)
+        self.assertEqual(result, {
+            "status": "NOT_ADMITTED", "source_repository": "scbrown/bobbin",
+            "release_tag": "v1.2.3", "source_revision": self.revision,
+        })
+        with self.assertRaisesRegex(ValueError, "invalid release identity"):
+            verifier.wait("bad-tag", self.revision, run=forbidden)
+        with self.assertRaisesRegex(ValueError, "boolean"):
+            verifier.wait("v1.2.3", self.revision, admitted="false", run=forbidden)
+
+    def test_admitted_release_still_verifies_downloaded_bytes(self):
+        self.prepare()
+        calls = []
+
+        def download(args, **kwargs):
+            calls.append(args)
+            folder = Path(args[args.index("--dir") + 1])
+            for source in (self.archive, self.proof_path, Path(str(self.archive) + ".sha256")):
+                shutil.copyfile(source, folder / source.name)
+            return subprocess.CompletedProcess(args, 0)
+
+        result = verifier.wait("v1.2.3", self.revision, attempts=1, run=download, admitted=True)
+        self.assertEqual(result["status"], "VERIFIED")
+        self.assertEqual(result["source_revision"], self.revision)
+        self.assertEqual(len(calls), 1)
+        self.archive.with_name(self.archive.name + ".sha256").write_text("wrong")
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            verifier.wait("v1.2.3", self.revision, attempts=1, run=download, admitted=True)
+
+    def test_admission_cli_reports_output_and_refuses_malformed_values(self):
+        for value, status, output in [(None, "NOT_ADMITTED", "false"), ("", "NOT_ADMITTED", "false"),
+                                      ("false", "NOT_ADMITTED", "false"), ("true", "ADMITTED", "true")]:
+            with self.subTest(value=value):
+                env = dict(os.environ)
+                env.pop("TRUSTED_REPOSITORY_SHARE_ENABLED", None)
+                if value is not None:
+                    env["TRUSTED_REPOSITORY_SHARE_ENABLED"] = value
+                target = self.root / "github-output"
+                target.write_text("existing=retained\n")
+                env["GITHUB_OUTPUT"] = str(target)
+                result = subprocess.run([sys.executable, str(ROOT / "verify-repository-share.py"), "--admission"],
+                                        env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["status"], status)
+                self.assertEqual(target.read_text(), "existing=retained\nadmitted=" + output + "\n")
+        for value in ("TRUE", "1", " false "):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "admission"):
+                verifier.publisher_admitted(value)
+
+    def test_release_workflow_binds_admission_before_readback(self):
+        workflow = (ROOT.parent / ".github/workflows/release.yml").read_text()
+        job = workflow.split("  repository-pendant:\n", 1)[1]
+        self.assertIn("TRUSTED_REPOSITORY_SHARE_ENABLED: ${{ vars.TRUSTED_REPOSITORY_SHARE_ENABLED }}", job)
+        self.assertIn("id: publisher\n        run: python3 scripts/verify-repository-share.py --admission", job)
+        self.assertIn("if: steps.publisher.outputs.admitted == 'true'", job)
+        self.assertLess(job.index("--admission"), job.index("Require repository-owned trusted-host pendant"))
 
 
 if __name__ == "__main__":
