@@ -21,6 +21,19 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.31.0](https://github.com/intigraph/bobbin/compare/v0.30.0...v0.31.0) (2026-10-24)
+
+
+### Features
+
+* add verified installer and concise stack guide ([#201](https://github.com/intigraph/bobbin/issues/201)) ([1827292](https://github.com/intigraph/bobbin/commit/182729224e2343d3a53350d437ce1085f4df725c))
+
+
+### Bug Fixes
+
+* **eval:** refuse contaminated independent L0 measurements ([#210](https://github.com/intigraph/bobbin/issues/210)) ([e010faa](https://github.com/intigraph/bobbin/commit/e010faaf5dc193aaff948b14b2726b2f85e7756e))
+* **runtime:** reject noisy ONNX sessions and quiet default diagnostics ([#213](https://github.com/intigraph/bobbin/issues/213)) ([145a272](https://github.com/intigraph/bobbin/commit/145a272eede56839aaac7df44668cb14cb466960))
+
 ## [0.30.0](https://github.com/intigraph/bobbin/compare/v0.29.0...v0.30.0) (2026-10-23)
 
 
