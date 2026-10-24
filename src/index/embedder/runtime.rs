@@ -46,7 +46,7 @@ pub(crate) fn auto_resolve_ort_dylib(prefer_gpu: bool) {
 
         if prefer_gpu && has_cuda {
             set_ort_env(candidate, dir);
-            eprintln!("auto-detected GPU ONNX Runtime at {}", candidate);
+            tracing::debug!("auto-detected GPU ONNX Runtime");
             return;
         }
         if best_cpu.is_none() {
@@ -59,12 +59,9 @@ pub(crate) fn auto_resolve_ort_dylib(prefer_gpu: bool) {
         let dir = Path::new(cpu_path).parent().unwrap();
         set_ort_env(cpu_path, dir);
         if prefer_gpu {
-            eprintln!(
-                "warning: GPU requested but no CUDA ONNX Runtime found, using CPU at {}",
-                cpu_path
-            );
+            eprintln!("warning: GPU requested but no CUDA ONNX Runtime found, using CPU");
         } else {
-            eprintln!("auto-detected ONNX Runtime at {}", cpu_path);
+            tracing::debug!("auto-detected CPU ONNX Runtime");
         }
     }
 }
