@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 
 pub mod access;
@@ -22,6 +22,7 @@ mod operational_metrics;
 pub mod plate;
 pub mod reactions;
 mod read_path;
+mod runtime_check;
 mod search;
 mod storage;
 pub mod tags;
@@ -203,6 +204,13 @@ mod ort_loader_tests {
 }
 
 fn main() -> Result<()> {
+    let mut args = std::env::args_os().skip(1);
+    if args.next().as_deref() == Some(std::ffi::OsStr::new(runtime_check::PROBE)) {
+        let model = args.next().context("ONNX validation requires a model")?;
+        anyhow::ensure!(args.next().is_none(), "Unexpected ONNX validation arguments");
+        ensure_ort_dylib();
+        return runtime_check::run_probe(std::path::Path::new(&model));
+    }
     let cli = Cli::parse();
     cli.prepare_gpu()?;
     ensure_ort_dylib();
@@ -214,8 +222,9 @@ async fn run(cli: Cli) -> Result<()> {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(tracing::Level::WARN.into())
+                .from_env_lossy(),
         )
         .init();
 

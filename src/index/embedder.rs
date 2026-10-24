@@ -360,6 +360,7 @@ impl OnnxEmbedder {
         // Auto-resolve ONNX Runtime library at well-known system paths.
         // The `load-dynamic` ort feature reads ORT_DYLIB_PATH at first use.
         auto_resolve_ort_dylib(use_gpu);
+        crate::runtime_check::validate(model_path)?;
 
         let mut builder = Session::builder().map_err(|e| {
             let hint = if std::env::var("ORT_DYLIB_PATH").is_err() {
@@ -397,7 +398,7 @@ impl OnnxEmbedder {
             .map_err(|e| {
                 anyhow::anyhow!(
                     "Failed to load ONNX model from {}: {}",
-                    model_path.display(),
+                    model_path.file_name().unwrap_or_default().to_string_lossy(),
                     e
                 )
             })?;
