@@ -1,0 +1,8 @@
+{
+  "status": "no-approved-mappings",
+  "approved_record_count": 0,
+  "carrier_sha256": "c345ddc89d879d93150851807656815c8139252ac799c139db8b6d24d3ec3a38",
+  "scope": "scbrown/bobbin repository pendant source",
+  "basis": "No verified approved artifact or pairs supplied at source review; empty carrier is explicit. This is not a global absence claim.",
+  "curation_contract": "https://github.com/scbrown/quipu/blob/main/docs/design/cross-graph-alignment.md"
+}

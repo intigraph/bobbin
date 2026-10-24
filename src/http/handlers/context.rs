@@ -288,6 +288,8 @@ pub(super) async fn context(
 
 #[derive(Deserialize)]
 pub(super) struct ReadChunkParams {
+    /// Repository name from the search result.
+    repo: Option<String>,
     /// File path (relative to repo root)
     file: String,
     /// Start line
@@ -317,6 +319,8 @@ pub(super) async fn read_chunk(
     let (content, actual_start, actual_end) = read_file_lines(
         &state.repo_root,
         &params.file,
+        params.repo.as_deref(),
+        state.config.server.repo_path_prefix.as_deref(),
         params.start_line,
         params.end_line,
         ctx,
@@ -337,14 +341,13 @@ pub(super) async fn read_chunk(
 fn read_file_lines(
     repo_root: &std::path::Path,
     file: &str,
+    repo: Option<&str>,
+    repo_prefix: Option<&str>,
     start: u32,
     end: u32,
     context: u32,
 ) -> anyhow::Result<(String, u32, u32)> {
-    let file_path = repo_root.join(file);
-    if !file_path.exists() {
-        anyhow::bail!("File not found: {}", file);
-    }
+    let file_path = crate::read_path::resolve_read_path(repo_root, file, repo, repo_prefix)?;
 
     let content = std::fs::read_to_string(&file_path)?;
     let lines: Vec<&str> = content.lines().collect();

@@ -1,9 +1,9 @@
-<p align="center"><img src="https://raw.githubusercontent.com/scbrown/bobbin/main/assets/bobbin-header.svg" width="100%" alt="Bobbin"/></p>
-<p align="center"><img src="https://raw.githubusercontent.com/scbrown/bobbin/main/assets/bobbin-spool.svg" width="200" alt="Thread bobbin spool"/></p>
+<p align="center"><img src="assets/bobbin-header.svg" width="100%" alt="Bobbin"/></p>
+<p align="center"><img src="assets/bobbin-spool.svg" width="200" alt="Thread bobbin spool"/></p>
 <h1 align="center">bobbin</h1>
 <p align="center"><em>🧶 Find the code your next change needs.</em></p>
 <p align="center">
-  <a href="https://github.com/scbrown/bobbin/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license"/></a>
   <a href="https://github.com/scbrown/bobbin/actions/workflows/ci.yml"><img src="https://github.com/scbrown/bobbin/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="https://github.com/scbrown/caboodle"><img src="https://img.shields.io/badge/stack-quipu-8B5E3C.svg" alt="Quipu stack"/></a>
 </p>

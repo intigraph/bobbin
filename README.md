@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/bobbin-header.svg" width="100%" alt="Bobbin"/></p>
+
 # bobbin
 
 **Bobbin gives developers and coding agents search and context over their
@@ -42,7 +44,7 @@ See the [quick start](https://scbrown.github.io/bobbin/getting-started/quick-sta
 
 ## Next steps
 
-- [Tambo](https://github.com/scbrown/tambo): guided stack installation and verification.
+- [Tambo](https://github.com/intigraph/tambo): guided stack installation and verification.
 - [Camayoc](https://github.com/scbrown/camayoc): governed memory and vocabulary.
 - [Detailed examples and agent setup](docs/installation-reference.md).
 
@@ -59,13 +61,13 @@ when.
 
 | tool | what it gives your agents |
 |---|---|
-| [tambo](https://github.com/scbrown/tambo) | 🧰 Agent Platform Toolkit - installs and configures the quipu stack |
+| [tambo](https://github.com/intigraph/tambo) | 🧰 Agent Platform Toolkit - installs and configures the quipu stack |
 | [quipu](https://github.com/scbrown/quipu) | stores shared facts with provenance and history; can check writes against your rules |
 | [camayoc](https://github.com/scbrown/camayoc) | prepares knowledge and vocabulary for Quipu, with checks before it is admitted |
 | [quechua](https://github.com/scbrown/quechua) | shared vocabulary and shapes for interoperable knowledge |
 | [chaski](https://github.com/scbrown/chaski) | reacts to graph changes and delivers governed notifications |
-| [bobbin](https://github.com/scbrown/bobbin) | searches your code and can include related knowledge from Quipu |
-| [yupana](https://github.com/scbrown/yupana) | shows code impact and can read policies from Quipu to check changes |
+| [bobbin](https://github.com/scbrown/bobbin) | indexes your codebase and injects context from that index and Quipu knowledge |
+| [yupana](https://github.com/scbrown/yupana) | shows code impact and can read policies from Quipu to govern agent actions |
 | [desire-path](https://github.com/scbrown/desire-path) | turns agent mistakes into feature requests; works on its own without Quipu |
 | [seeds](https://github.com/scbrown/seeds) | a work item tracker backed by the Quipu knowledge base |
 | [shantytown](https://github.com/scbrown/shantytown) | runs crews of AI agents on work items, triggered by hand, on a schedule or by events; can share work and memory through Quipu |

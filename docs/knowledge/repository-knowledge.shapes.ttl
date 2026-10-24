@@ -1,0 +1,52 @@
+@prefix a: <http://aegis.gastown.local/ontology/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sssom: <https://w3id.org/sssom/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+# This profile constrains only explicitly curated repository knowledge. It
+# does not turn every imported Concept or CodeModule into a Bobbin record.
+a:BobbinKnowledgeProfile a sh:NodeShape ;
+    sh:targetSubjectsOf a:knowledgeKind ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path rdfs:comment ; sh:minCount 1 ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path a:knowledgeKind ; sh:minCount 1 ;
+                  sh:in ( "idea" "interface" "decision" "start-here" ) ; ] ;
+    sh:property [ sh:path a:filePath ; sh:minCount 1 ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path a:reviewAfter ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ; ] ;
+    sh:property [ sh:path a:sourceHash ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^[0-9a-f]{64}$" ; ] ;
+    # maxAge is seconds since the explicit source review, not an eviction rule.
+    sh:property [ sh:path a:maxAge ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minExclusive 0 ; ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ; sh:nodeKind sh:IRI ; ] .
+
+a:BobbinInterfaceProfile a sh:NodeShape ;
+    sh:targetSubjectsOf a:interfaceKind ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path a:interfaceKind ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:in ( "CLI" "MCP" "REST" "config" "file-format" "library" ) ; ] ;
+    sh:property [ sh:path a:publicName ; sh:minCount 1 ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path a:depends_on ; sh:nodeKind sh:IRI ; ] .
+
+a:BobbinDecisionProfile a sh:NodeShape ;
+    sh:targetSubjectsOf a:supersessionStatus ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path a:status ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "active" "superseded" "proposed" ) ; ] ;
+    sh:property [ sh:path a:supersessionStatus ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:in ( "not-recorded-in-source" "recorded" ) ; ] .
+
+# Existing SSSOM/RDF is a record, not a second identity-assertion format. The
+# native align decide/apply path remains the only way to derive identity knots.
+a:BobbinMappingRecordProfile a sh:NodeShape ;
+    sh:targetSubjectsOf sssom:subject_id ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path sssom:subject_id ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; ] ;
+    sh:property [ sh:path sssom:object_id ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; ] ;
+    sh:property [ sh:path sssom:predicate_id ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; ] ;
+    sh:property [ sh:path sssom:mapping_justification ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; ] .
+
+a:BobbinNoHandAuthoredIdentity a sh:NodeShape ;
+    sh:targetSubjectsOf owl:sameAs ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path owl:sameAs ; sh:maxCount 0 ; ] .

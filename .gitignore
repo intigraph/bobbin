@@ -49,3 +49,6 @@ book/_build/
 *.db
 .beads-credential-key
 *.gate.lock*
+
+# Quipu local databases and signing state are never repository source.
+/.quipu/

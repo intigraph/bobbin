@@ -439,6 +439,10 @@ pub struct SymbolItemOutput {
 /// Request for reading a specific code chunk
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ReadChunkRequest {
+    /// Repository name from search; omit for a unique or workspace path.
+    #[schemars(description = "Repository name; required for ambiguous relative paths")]
+    pub repo: Option<String>,
+
     /// File path containing the chunk
     #[schemars(description = "File path (relative to repo root) containing the code chunk")]
     pub file: String,

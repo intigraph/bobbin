@@ -1,0 +1,13 @@
+Script started on 2026-10-20 22:58:22-04:00 [COMMAND="stty -onlcr; cd eval && python3 -m pytest -q -rA tests/test_index_reuse.py -k 'sealed_positive or no_coupling_copy or actual_cli_callback or timeout_reaps or isolated_cells or embedded_coupling'" <not executed on terminal>]
+......                                                                   [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_index_reuse.py::test_sealed_positive_and_payload_tamper_falsifier
+PASSED tests/test_index_reuse.py::test_no_coupling_copy_preserves_vectors_and_cannot_mutate_full
+PASSED tests/test_index_reuse.py::test_actual_cli_callback_derives_once_and_refuses_corrupt_reuse
+PASSED tests/test_index_reuse.py::test_timeout_reaps_its_own_index_grandchild
+PASSED tests/test_index_reuse.py::test_isolated_cells_restore_history_and_archive_each_cell
+PASSED tests/test_index_reuse.py::test_embedded_coupling_removed_only_from_private_derived_copy
+6 passed, 20 deselected in 1.81s
+
+Script done on 2026-10-20 22:58:24-04:00 [COMMAND_EXIT_CODE="0"]

@@ -69,18 +69,19 @@ class TestSetupBobbin:
         """Patch _find_bobbin, subprocess.run, and subprocess.Popen.
 
         setup_bobbin uses subprocess.run for init and status, and
-        subprocess.Popen for index (to stream stderr progress).
+        subprocess.Popen for the bounded index communication.
         """
         popen_inst = MagicMock()
         popen_inst.stderr = iter([])
         popen_inst.stdout.read.return_value = ""
-        popen_inst.wait.return_value = None
+        popen_inst.communicate.return_value = ("", "")
         popen_inst.returncode = 0
 
         with (
             patch("runner.bobbin_setup._find_bobbin", return_value="/usr/bin/bobbin"),
             patch("runner.bobbin_setup.subprocess.run") as mock_run,
             patch("runner.bobbin_setup.subprocess.Popen") as mock_popen,
+            patch("runner.bobbin_setup.os.killpg"),
         ):
             mock_run.return_value = subprocess.CompletedProcess(
                 args=[], returncode=0, stdout="", stderr="",
@@ -160,9 +161,9 @@ class TestSetupBobbin:
     def test_index_timeout_raises(self, mock_bobbin, tmp_path: Path):
         mock_run, mock_popen = mock_bobbin
         popen_inst = mock_popen.return_value
-        popen_inst.wait.side_effect = subprocess.TimeoutExpired(
+        popen_inst.communicate.side_effect = [subprocess.TimeoutExpired(
             cmd=["bobbin", "index"], timeout=300,
-        )
+        ), ("", "")]
 
         with pytest.raises(BobbinSetupError, match="timed out"):
             setup_bobbin(str(tmp_path))
@@ -190,9 +191,9 @@ class TestSetupBobbin:
         mock_run, mock_popen = mock_bobbin
         setup_bobbin(str(tmp_path), timeout=120)
 
-        # The Popen.wait() call should use the custom timeout.
+        # communicate must bound execution while both pipes drain.
         popen_inst = mock_popen.return_value
-        popen_inst.wait.assert_called_once_with(timeout=120)
+        popen_inst.communicate.assert_called_once_with(timeout=120)
 
     def test_returns_profile_when_available(self, mock_bobbin, tmp_path: Path):
         """setup_bobbin captures profiling data from -v output."""
@@ -220,7 +221,7 @@ class TestSetupBobbin:
             "  embed throughput: 2000.0 chunks/s\n"
         )
         popen_inst = mock_popen.return_value
-        popen_inst.stdout.read.return_value = verbose_output
+        popen_inst.communicate.return_value = (verbose_output, "")
 
         mock_run.side_effect = [
             subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
@@ -477,13 +478,14 @@ class TestSetupBobbinWithOverrides:
         popen_inst = MagicMock()
         popen_inst.stderr = iter([])
         popen_inst.stdout.read.return_value = ""
-        popen_inst.wait.return_value = None
+        popen_inst.communicate.return_value = ("", "")
         popen_inst.returncode = 0
 
         with (
             patch("runner.bobbin_setup._find_bobbin", return_value="/usr/bin/bobbin"),
             patch("runner.bobbin_setup.subprocess.run") as mock_run,
             patch("runner.bobbin_setup.subprocess.Popen") as mock_popen,
+            patch("runner.bobbin_setup.os.killpg"),
         ):
             mock_run.return_value = subprocess.CompletedProcess(
                 args=[], returncode=0, stdout="", stderr="",
