@@ -149,3 +149,12 @@ satisfy a missing derived-workspace file, even when both directories share a nam
 An unreadable candidate is an explicit error, not evidence of absence. Strict
 metadata reads refuse instead of treating an inaccessible alternative as a
 unique path match.
+
+The sealed driver now additionally records
+`hook_outcomes=independent-hook-outcomes/v1`; this refuses residual session
+contamination, unexplained silence and unsupported/contradictory hook outcomes
+instead of admitting them as independent observations. Error cells have null
+efficacy metrics and trigger the existing quarantine. Legacy rows remain
+unchanged. The [outcome reconciliation and next-run gate](l0-outcome-contract.md)
+separates delivered source controls from the still-required native enrollment,
+measured aggregate-storage plan and separately accepted execution envelope.
