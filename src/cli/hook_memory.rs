@@ -95,10 +95,6 @@ pub(super) async fn run(raw: &str, overrides: &Overrides, server: Option<&str>) 
         .as_ref()
         .and_then(|r| Config::load(&Config::config_path(r)).ok())
         .unwrap_or_default();
-    // No quipu configured: no memory lane, no output, no cost.
-    let Some(endpoint) = crate::tripwire::endpoint(&config) else {
-        return;
-    };
     let hooks = &config.hooks;
     let min_len = overrides
         .min_prompt_length
@@ -106,7 +102,17 @@ pub(super) async fn run(raw: &str, overrides: &Overrides, server: Option<&str>) 
     let Some(query) = memory_query(&input.prompt, min_len, &hooks.skip_prefixes) else {
         return;
     };
+    let backlog = backlog_header();
+    let Some(endpoint) = crate::tripwire::endpoint(&config) else {
+        if let Some(line) = backlog {
+            println!("{line}");
+        }
+        return;
+    };
     let Some(path) = mem::mirror_path() else {
+        if let Some(line) = backlog {
+            println!("{line}");
+        }
         return;
     };
     let mirror = mem::load_mirror(&path);
@@ -122,9 +128,22 @@ pub(super) async fn run(raw: &str, overrides: &Overrides, server: Option<&str>) 
         config.context.knowledge_budget_pct,
         now,
     ) {
-        mem::Recall::Silent => {}
-        mem::Recall::Skipped(line) => print!("{line}"),
+        mem::Recall::Silent => {
+            if let Some(line) = backlog {
+                println!("{line}");
+            }
+        }
+        mem::Recall::Skipped(line) => {
+            if let Some(header) = backlog {
+                println!("{header}");
+            }
+            print!("{line}");
+        }
         mem::Recall::Items { text, items } => {
+            let text = match backlog {
+                Some(header) => text.replacen(mem::HEADER, &header, 1),
+                None => text,
+            };
             let (injection_id, own) = match take_injection_id() {
                 Some(id) => (id, false),
                 None => (generate_context_injection_id(&query), true),
@@ -149,6 +168,78 @@ pub(super) async fn run(raw: &str, overrides: &Overrides, server: Option<&str>) 
             )
             .await;
         }
+    }
+}
+
+// Camayoc owns the queue. Count its bounded local JSONL without a subprocess,
+// network request, mutation or any queued text entering the injection.
+fn backlog_count(path: &std::path::Path) -> Option<usize> {
+    use std::io::Read;
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => return None,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Some(0),
+        Err(_) => return None,
+    }
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Some(0),
+        Err(_) => return None,
+    };
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+    const MAX_BYTES: u64 = 16 * 1024 * 1024;
+    let mut bytes = Vec::new();
+    file.take(MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
+    if bytes.len() as u64 > MAX_BYTES || (!bytes.is_empty() && !bytes.ends_with(b"\n")) {
+        return None;
+    }
+    let text = std::str::from_utf8(&bytes).ok()?;
+    let mut count = 0;
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let row: serde_json::Value = serde_json::from_str(line).ok()?;
+        if !row.is_object() {
+            return None;
+        }
+        count += 1;
+    }
+    Some(count)
+}
+
+fn backlog_header() -> Option<String> {
+    let root = std::env::var_os("XDG_STATE_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            directories::BaseDirs::new().map(|dirs| dirs.home_dir().join(".local/state"))
+        })?;
+    backlog_status(backlog_total(&root))
+}
+
+fn backlog_total(root: &std::path::Path) -> Option<usize> {
+    [
+        "memory-queue.jsonl",
+        "capture-spool.inflight.jsonl",
+        "capture-spool.jsonl",
+    ]
+    .into_iter()
+    .try_fold(0usize, |total, name| {
+        total.checked_add(backlog_count(&root.join("camayoc").join(name))?)
+    })
+}
+
+fn backlog_status(count: Option<usize>) -> Option<String> {
+    match count {
+        Some(0) => None,
+        Some(count) => Some(format!(
+            "{}; camayoc backlog: {count} queued (cy flush)",
+            mem::HEADER
+        )),
+        None => Some(format!(
+            "{}; camayoc backlog: UNKNOWN (local queue unreadable)",
+            mem::HEADER
+        )),
     }
 }
 
@@ -313,5 +404,54 @@ mod tests {
         note_injection_id("inj-test0001");
         assert_eq!(take_injection_id().as_deref(), Some("inj-test0001"));
         assert_eq!(take_injection_id(), None);
+    }
+}
+
+#[cfg(test)]
+mod backlog_tests {
+    use super::{backlog_count, backlog_status, backlog_total};
+
+    #[test]
+    fn header_counts_pending_and_never_hides_unknown_as_zero() {
+        assert_eq!(backlog_status(Some(0)), None);
+        assert!(backlog_status(Some(3))
+            .unwrap()
+            .contains("3 queued (cy flush)"));
+        assert!(backlog_status(None).unwrap().contains("backlog: UNKNOWN"));
+    }
+
+    #[test]
+    fn legacy_inflight_is_pending_and_unreadable_prefix_is_unknown() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join("camayoc");
+        std::fs::create_dir(&state).unwrap();
+        let prefix = state.join("capture-spool.inflight.jsonl");
+        std::fs::write(&prefix, "{}\n").unwrap();
+        assert_eq!(backlog_total(dir.path()), Some(1));
+        std::fs::write(state.join("capture-spool.jsonl"), "{}\n{}\n").unwrap();
+        assert_eq!(backlog_total(dir.path()), Some(3));
+        std::fs::write(&prefix, "{partial").unwrap();
+        assert_eq!(backlog_total(dir.path()), None);
+        assert_eq!(std::fs::read_to_string(&prefix).unwrap(), "{partial");
+    }
+
+    #[test]
+    fn count_is_local_bounded_and_does_not_expose_bodies() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("memory-queue.jsonl");
+        assert_eq!(backlog_count(&path), Some(0));
+        std::fs::write(
+            &path,
+            "{\"entity\":\"decision\",\"args\":{\"chose\":\"private body\"}}\n{}\n",
+        )
+        .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert_eq!(backlog_count(&path), Some(2));
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        std::fs::write(&path, "{partial").unwrap();
+        assert_eq!(backlog_count(&path), None);
+        std::fs::write(&path, "not-json\n").unwrap();
+        assert_eq!(backlog_count(&path), None);
+        assert_eq!(backlog_count(dir.path()), None);
     }
 }
