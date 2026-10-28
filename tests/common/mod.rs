@@ -256,10 +256,12 @@ Provides semantic and keyword search capabilities.
     }
 
     /// Create an assert_cmd Command for bobbin with test isolation.
-    /// Sets BOBBIN_SERVER="" to prevent global config from routing to production.
+    /// Disable inherited search/Quipu routes unless a fixture overrides them.
     pub fn bobbin_cmd() -> Command {
         let mut cmd = Command::new(Self::bobbin_bin());
-        cmd.env("BOBBIN_SERVER", "");
+        cmd.env("BOBBIN_SERVER", "")
+            .env("BOBBIN_QUIPU_REMOTE", "")
+            .env("QUIPU_SERVER", "http://127.0.0.1:0");
         cmd
     }
 }

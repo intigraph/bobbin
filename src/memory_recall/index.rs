@@ -225,7 +225,7 @@ pub struct RefreshReport {
 /// Optional read bearer: `QUIPU_AUTH_TOKEN`, then `QUIPU_AUTH_TOKEN_FILE`,
 /// then `~/.config/quipu/token`. Reads only; a missing token is not an error
 /// here (the server decides whether `/ask` needs one).
-fn read_token() -> Option<String> {
+pub(crate) fn read_token() -> Option<String> {
     if let Some(t) = std::env::var("QUIPU_AUTH_TOKEN")
         .ok()
         .map(|s| s.trim().to_string())
