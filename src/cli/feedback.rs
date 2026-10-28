@@ -4,6 +4,9 @@ use colored::Colorize;
 
 use super::OutputConfig;
 
+#[path = "feedback_render.rs"]
+mod render;
+
 #[derive(Args)]
 pub struct FeedbackArgs {
     #[command(subcommand)]
@@ -191,26 +194,13 @@ pub async fn run(args: FeedbackArgs, output: OutputConfig) -> Result<()> {
                 eprintln!("No feedback records found.");
             } else {
                 for r in &records {
-                    println!(
-                        "{} {} {} {} {}",
-                        format!("#{}", r.id).dimmed(),
-                        match &r.item {
-                            Some(it) => format!("{} {}", r.injection_id, it).cyan(),
-                            None => r.injection_id.cyan(),
-                        },
-                        match r.rating.as_str() {
-                            "useful" => r.rating.green(),
-                            "noise" => r.rating.yellow(),
-                            "harmful" => r.rating.red(),
-                            "used" => r.rating.blue(),
-                            _ => r.rating.normal(),
-                        },
-                        r.agent.dimmed(),
-                        if r.reason.is_empty() {
-                            String::new()
-                        } else {
-                            format!("— {}", r.reason)
-                        },
+                    render::print_record(
+                        r.id,
+                        &r.injection_id,
+                        r.item.as_deref(),
+                        &r.rating,
+                        &r.agent,
+                        &r.reason,
                     );
                 }
                 eprintln!("\n{} record(s)", records.len());
@@ -262,10 +252,7 @@ pub async fn run(args: FeedbackArgs, output: OutputConfig) -> Result<()> {
                         format!("{}", stats.used).blue(),
                     );
                     for e in &stats.memory_entities {
-                        println!(
-                            "  memory {:<9} inj {:>3} used {:>3} noise {:>3}  {}",
-                            e.kind, e.injected, e.used, e.noise, e.iri
-                        );
+                        render::print_entity(&e.kind, e.injected, e.used, e.noise, &e.iri);
                     }
                     println!(
                         "  Lineage:     {} actioned, {} unactioned, {} records",
@@ -407,26 +394,13 @@ async fn run_remote(args: FeedbackArgs, output: OutputConfig, server_url: &str) 
                 eprintln!("No feedback records found.");
             } else {
                 for r in &records {
-                    println!(
-                        "{} {} {} {} {}",
-                        format!("#{}", r.id).dimmed(),
-                        match &r.item {
-                            Some(it) => format!("{} {}", r.injection_id, it).cyan(),
-                            None => r.injection_id.cyan(),
-                        },
-                        match r.rating.as_str() {
-                            "useful" => r.rating.green(),
-                            "noise" => r.rating.yellow(),
-                            "harmful" => r.rating.red(),
-                            "used" => r.rating.blue(),
-                            _ => r.rating.normal(),
-                        },
-                        r.agent.dimmed(),
-                        if r.reason.is_empty() {
-                            String::new()
-                        } else {
-                            format!("— {}", r.reason)
-                        },
+                    render::print_record(
+                        r.id,
+                        &r.injection_id,
+                        r.item.as_deref(),
+                        &r.rating,
+                        &r.agent,
+                        &r.reason,
                     );
                 }
                 eprintln!("\n{} record(s)", records.len());
@@ -475,10 +449,7 @@ async fn run_remote(args: FeedbackArgs, output: OutputConfig, server_url: &str) 
                         format!("{}", stats.used).blue(),
                     );
                     for e in &stats.memory_entities {
-                        println!(
-                            "  memory {:<9} inj {:>3} used {:>3} noise {:>3}  {}",
-                            e.kind, e.injected, e.used, e.noise, e.iri
-                        );
+                        render::print_entity(&e.kind, e.injected, e.used, e.noise, &e.iri);
                     }
                     println!(
                         "  Lineage:     {} actioned, {} unactioned, {} records",

@@ -1,15 +1,22 @@
 {
   "_comment": "STUB of the camayoc stored query bobbin's memory mirror consumes (aegis-gshu.2). The real per-entity recall queries are built by aegis-gshu.10 in camayoc; replace this stub when they land. Interface: see src/memory_recall.rs module docs. The stub reads the body from rdfs:comment; camayoc maps each entity's own field (chose, rule, prefers, lesson, ...) to body. quipu's SPARQL engine leaves IF/COALESCE results unbound, so status and cursor come from a UNION of a current branch and a superseded branch.",
   "name": "mem_index_since",
-  "description": "Memory records changed since a cursor: current ones to upsert, superseded ones to delete. Ordered by cursor; 50 rows plus one overflow sentinel.",
+  "description": "Memory records changed after a (cursor, iri) position: current ones to upsert, superseded ones to delete. Ordered by cursor then IRI string; 50 rows plus one overflow sentinel.",
   "params": [
     {
       "name": "since",
       "kind": "text",
       "required": false,
       "default": "",
-      "description": "Opaque cursor from the last row of the previous page; empty for a full pull."
+      "description": "cursor of the last row of the previous page; empty for a full pull."
+    },
+    {
+      "name": "since_iri",
+      "kind": "text",
+      "required": false,
+      "default": "",
+      "description": "IRI of the last row of the previous page; with since, the position the next page starts after."
     }
   ],
-  "template": "PREFIX aegis: <http://aegis.gastown.local/ontology/>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT ?iri ?naturalKey ?kind ?label ?body ?sourceKind ?recordedAt ?reviewAfter ?expiresAt ?status ?cursor WHERE {\n  ?iri aegis:naturalKey ?naturalKey ;\n       a ?kind ;\n       rdfs:label ?label ;\n       aegis:recordedAt ?recordedAt .\n  OPTIONAL { ?iri rdfs:comment ?body }\n  OPTIONAL { ?iri aegis:sourceKind ?sourceKind }\n  OPTIONAL { ?iri aegis:reviewAfter ?reviewAfter }\n  OPTIONAL { ?iri aegis:expiresAt ?expiresAt }\n  {\n    ?iri aegis:recordedAt ?currentAt .\n    FILTER NOT EXISTS { ?iri aegis:supersededBy ?anyNewer }\n    BIND(\"current\" AS ?status)\n    BIND(STR(?currentAt) AS ?cursor)\n  } UNION {\n    ?iri aegis:supersededBy ?newer .\n    ?newer aegis:recordedAt ?supersededAt .\n    BIND(\"superseded\" AS ?status)\n    BIND(STR(?supersededAt) AS ?cursor)\n  }\n  FILTER(?cursor > '{since}')\n}\nORDER BY ?cursor ?iri\nLIMIT 51"
+  "template": "PREFIX aegis: <http://aegis.gastown.local/ontology/>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT ?iri ?naturalKey ?kind ?label ?body ?sourceKind ?recordedAt ?reviewAfter ?expiresAt ?status ?cursor WHERE {\n  ?iri aegis:naturalKey ?naturalKey ;\n       a ?kind ;\n       rdfs:label ?label ;\n       aegis:recordedAt ?recordedAt .\n  OPTIONAL { ?iri rdfs:comment ?body }\n  OPTIONAL { ?iri aegis:sourceKind ?sourceKind }\n  OPTIONAL { ?iri aegis:reviewAfter ?reviewAfter }\n  OPTIONAL { ?iri aegis:expiresAt ?expiresAt }\n  {\n    ?iri aegis:recordedAt ?currentAt .\n    FILTER NOT EXISTS { ?iri aegis:supersededBy ?anyNewer }\n    BIND(\"current\" AS ?status)\n    BIND(STR(?currentAt) AS ?cursor)\n  } UNION {\n    ?iri aegis:supersededBy ?newer .\n    ?newer aegis:recordedAt ?supersededAt .\n    BIND(\"superseded\" AS ?status)\n    BIND(STR(?supersededAt) AS ?cursor)\n  }\n  BIND(STR(?iri) AS ?iriKey)\n  FILTER(?cursor > '{since}' || (?cursor = '{since}' && ?iriKey > '{since_iri}'))\n}\nORDER BY ?cursor ?iriKey\nLIMIT 51"
 }

@@ -251,7 +251,8 @@ pub(super) async fn run_refresh(
             "path": path,
             "endpoint": mirror.as_ref().map(|m| m.endpoint.clone()),
             "items": mirror.as_ref().map(|m| m.items.len()).unwrap_or(0),
-            "cursor": mirror.as_ref().map(|m| m.cursor.clone()),
+            "cursor": mirror.as_ref().map(|m| (m.cursor.clone(), m.cursor_iri.clone())),
+            "refresh_running": mem::refresh_running(&path),
             "age_secs": mirror.as_ref().and_then(|m| m.age_secs(now)),
             "last_error": mirror.as_ref().and_then(|m| m.last_error.clone()),
         });
@@ -271,10 +272,13 @@ pub(super) async fn run_refresh(
             }
             Ok(())
         }
-        Err(e) if quiet => {
-            let _ = e;
+        Err(e) if e.downcast_ref::<mem::RefreshBusy>().is_some() => {
+            if !quiet {
+                eprintln!("bobbin: {e}; nothing to do");
+            }
             Ok(())
         }
+        Err(_) if quiet => Ok(()),
         Err(e) => Err(e),
     }
 }

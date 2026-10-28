@@ -68,7 +68,10 @@ fn decode_page_reads_quipu_cells_and_statuses() {
     });
     let page = decode_page(&body).unwrap();
     assert!(!page.overflow);
-    assert_eq!(page.last_cursor.as_deref(), Some("2026-10-02T00:00:00Z"));
+    assert_eq!(
+        page.last_cursor,
+        Some(("2026-10-02T00:00:00Z".to_string(), "urn:b".to_string()))
+    );
     assert_eq!(
         page.changes.len(),
         2,
@@ -93,7 +96,10 @@ fn decode_page_flags_overflow_sentinel_and_drops_it() {
     let page = decode_page(&serde_json::json!({ "rows": rows })).unwrap();
     assert!(page.overflow);
     assert_eq!(page.changes.len(), PAGE_LIMIT);
-    assert_eq!(page.last_cursor.as_deref(), Some("049"));
+    assert_eq!(
+        page.last_cursor,
+        Some(("049".to_string(), "urn:i049".to_string()))
+    );
 }
 
 #[test]
@@ -346,6 +352,47 @@ async fn refresh_records_unreachable_quipu() {
     assert!(m.refreshed_at.is_none());
 }
 
+#[test]
+fn refresh_lock_is_exclusive_and_released_on_drop() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("memory-mirror.json");
+    let held = RefreshLock::acquire(&path).expect("first lock");
+    assert!(refresh_running(&path));
+    assert!(
+        RefreshLock::acquire(&path).is_none(),
+        "second refresh must not start"
+    );
+    drop(held);
+    assert!(!refresh_running(&path));
+    assert!(RefreshLock::acquire(&path).is_some());
+}
+
+#[test]
+fn stale_refresh_lock_is_taken_over() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("memory-mirror.json");
+    // A crashed holder left its lock behind.
+    std::fs::write(lock_path(&path), "4242 0").unwrap();
+    assert!(
+        RefreshLock::acquire(&path).is_none(),
+        "a fresh lock is respected"
+    );
+    let lock = RefreshLock::acquire_with(&path, 0).expect("stale lock is taken over");
+    drop(lock);
+    assert!(!lock_path(&path).exists());
+}
+
+#[tokio::test]
+async fn refresh_while_another_runs_does_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("memory-mirror.json");
+    let _held = RefreshLock::acquire(&path).unwrap();
+    let err = refresh("http://127.0.0.1:9", &path).await.unwrap_err();
+    assert!(err.downcast_ref::<RefreshBusy>().is_some(), "{err:#}");
+    // No attempt recorded, no error written: the running refresh owns the mirror.
+    assert!(load_mirror(&path).is_none());
+}
+
 // ---------------------------------------------------------------------------
 // Local quipu store with fixture entities and the stub stored query
 // ---------------------------------------------------------------------------
@@ -534,5 +581,34 @@ mod local_quipu {
             }
             other => panic!("expected items, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn same_timestamp_rows_across_a_page_boundary_are_not_dropped() {
+        let mut store = fixture_store();
+        // 120 records changed in the same second: more than two pages, all
+        // sharing one cursor value. Paging on the timestamp alone loses all
+        // but the first page of them.
+        let mut ttl = String::from(
+            "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
+             @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n",
+        );
+        for n in 0..120 {
+            ttl.push_str(&format!(
+                "<http://aegis.gastown.local/ontology/mem/lesson/bulk/t{n:03}/20261015T000000Z> a aegis:Lesson ;\n\
+                   aegis:naturalKey <http://aegis.gastown.local/ontology/mem/lesson/bulk/t{n:03}> ;\n\
+                   rdfs:label \"Bulk lesson {n}\" ;\n\
+                   aegis:sourceKind \"crew:inferred\" ;\n\
+                   aegis:recordedAt \"2026-10-15T00:00:00Z\" .\n"
+            ));
+        }
+        knot(&mut store, &ttl, "2026-10-27T02:00:00Z");
+        let endpoint = serve(Arc::new(Mutex::new(store))).await;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("memory-mirror.json");
+
+        let report = refresh(&endpoint, &path).await.unwrap();
+        assert!(report.pages >= 3, "{report:?}");
+        assert_eq!(report.items, 9 + 120, "{report:?}");
     }
 }
