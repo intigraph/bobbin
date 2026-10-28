@@ -2,7 +2,11 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 fn bobbin() -> Command {
-    Command::new(assert_cmd::cargo::cargo_bin!("bobbin"))
+    let mut command = Command::new(assert_cmd::cargo::cargo_bin!("bobbin"));
+    command
+        .env("BOBBIN_QUIPU_REMOTE", "")
+        .env("QUIPU_SERVER", "http://127.0.0.1:0");
+    command
 }
 
 #[test]

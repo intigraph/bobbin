@@ -110,6 +110,22 @@ bobbin hook session-context [OPTIONS]
 |--------|-------------|
 | `--budget <LINES>` | Maximum lines of context (overrides config) |
 
+The existing compact handler also rebuilds memory pins when a Quipu endpoint
+and an explicit `SHANTY_AGENT` (or `QUIPU_AGENT`) are available. It reads the
+current two-day Handoff and `mem_directives_for(agent)` titles through Camayoc's
+stored queries. Agent and crew-wide directives follow that query's scope.
+The block carries provenance and full item IRIs, uses at most 15 lines, and
+reserves space within `--budget` before git and breadcrumb recovery. It is
+rebuilt for each compaction and is not re-injected per prompt or saved as a
+stale anchor file.
+
+The two read-only requests run concurrently with a 750 ms deadline and a bounded
+response size. A failed/missing query is reported as unavailable; successful
+pins and repository recovery remain usable. Without an endpoint or a known
+agent, no memory call is made. `BOBBIN_MEMORY_RECALL=0` disables this block along
+with per-prompt memory recall. `CAMAYOC_PLANE_NS` selects the same plane prefix
+as Camayoc. No new hook registration, graph write, capture or promotion occurs.
+
 ### install-git-hook
 
 Install a post-commit git hook that runs `bobbin index` after each commit.

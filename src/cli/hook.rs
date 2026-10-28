@@ -18,6 +18,8 @@ mod breadcrumb_triggers;
 mod breadcrumbs;
 #[path = "hook_memory.rs"]
 mod hook_memory;
+#[path = "hook_memory_anchor.rs"]
+mod memory_anchor;
 #[path = "hook_primer.rs"]
 mod primer;
 use primer::extract_brief;
@@ -6506,20 +6508,24 @@ async fn run_session_context_inner(args: SessionContextArgs) -> Result<()> {
     }
 
     // Load config (use defaults if not initialized)
-    let config = Config::load(&Config::config_path(&cwd)).unwrap_or_default();
+    let root = find_bobbin_root(&cwd).unwrap_or(cwd.clone());
+    let config = Config::load(&Config::config_path(&root)).unwrap_or_default();
     let budget = args.budget.unwrap_or(config.hooks.budget);
+    let pins = memory_anchor::run(&config, budget).await;
+    let remaining = budget.saturating_sub(pins.lines().count());
 
     // 4. Gather git signals
-    let modified_files = git_status_files(&cwd)?;
-    let recent_commits = git_recent_commits(&cwd, 5)?;
-    let recently_changed_files = git_recently_changed_files(&cwd, 3)?;
+    let modified_files = git_status_files(&cwd).unwrap_or_default();
+    let recent_commits = git_recent_commits(&cwd, 5).unwrap_or_default();
+    let recently_changed_files = git_recently_changed_files(&cwd, 3).unwrap_or_default();
 
-    let discovery = breadcrumbs::discovery(&find_bobbin_root(&cwd).unwrap_or(cwd.clone()), budget);
-    // If neither git nor breadcrumbs has context, exit silently.
+    let discovery = breadcrumbs::discovery(&root, remaining);
+    // If git, breadcrumbs and memory pins are all empty, exit silently.
     if modified_files.is_empty()
         && recent_commits.is_empty()
         && recently_changed_files.is_empty()
         && discovery.is_empty()
+        && pins.is_empty()
     {
         return Ok(());
     }
@@ -6602,20 +6608,27 @@ async fn run_session_context_inner(args: SessionContextArgs) -> Result<()> {
     file_symbols.sort_by(|a, b| a.path.cmp(&b.path));
     coupled_files.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
 
-    // 7. Format compact markdown within budget
-    let mut context_md = format_session_context(
-        &modified_files,
-        &recent_commits,
-        &file_symbols,
-        &coupled_files,
-        budget.saturating_sub(discovery.lines().count() + usize::from(!discovery.is_empty())),
-    );
-    if !discovery.is_empty() {
-        if !context_md.is_empty() {
-            context_md.push('\n');
-        }
-        context_md.push_str(&discovery);
-    }
+    // Pins have their own 15-line cap and reserve space in the existing
+    // total budget; git/breadcrumb recovery continues after a memory outage.
+    let git_budget = remaining.saturating_sub(discovery.lines().count());
+    let git_context = if git_budget == 0
+        || (modified_files.is_empty()
+            && recent_commits.is_empty()
+            && file_symbols.is_empty()
+            && coupled_files.is_empty()
+            && discovery.is_empty())
+    {
+        String::new()
+    } else {
+        format_session_context(
+            &modified_files,
+            &recent_commits,
+            &file_symbols,
+            &coupled_files,
+            git_budget,
+        )
+    };
+    let context_md = memory_anchor::combine(&[&pins, &git_context, &discovery], budget);
 
     if context_md.is_empty() {
         return Ok(());
