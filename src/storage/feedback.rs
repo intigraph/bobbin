@@ -22,6 +22,10 @@ pub struct FeedbackInput {
     pub rating: String,
     #[serde(default)]
     pub reason: String,
+    /// Per-item citation inside the injection: `m1`..`m5` for the memory
+    /// items bobbin tagged (aegis-gshu.2). Omit to rate the whole injection.
+    #[serde(default)]
+    pub item: Option<String>,
 }
 
 /// A stored feedback record.
@@ -33,6 +37,28 @@ pub struct FeedbackRecord {
     pub agent: String,
     pub rating: String,
     pub reason: String,
+    /// Cited item (`m1`..`m5`) when the rating is for one memory item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item: Option<String>,
+    /// The entity IRI that item resolved to when the injection was logged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iri: Option<String>,
+}
+
+/// Usage of one cited memory entity across feedback (aegis-gshu.2).
+#[derive(Debug, Serialize)]
+pub struct EntityUsage {
+    pub iri: String,
+    pub kind: String,
+    /// Times the entity was injected as a cited memory item.
+    pub injected: u64,
+    pub used: u64,
+    pub useful: u64,
+    pub noise: u64,
+    pub harmful: u64,
+    /// Last `used` rating, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_used: Option<String>,
 }
 
 /// Query parameters for listing feedback.
@@ -52,6 +78,15 @@ pub struct FeedbackStats {
     pub useful: u64,
     pub noise: u64,
     pub harmful: u64,
+    /// Ratings that say a cited memory item was used (aegis-gshu.2).
+    #[serde(default)]
+    pub used: u64,
+    /// Feedback records that name a cited item (`m1`..`m5`).
+    #[serde(default)]
+    pub item_feedback: u64,
+    /// Most-injected cited memory entities with their ratings (top 20).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub memory_entities: Vec<EntityUsage>,
     /// Feedback records that have at least one lineage action.
     #[serde(default)]
     pub actioned: u64,
@@ -136,10 +171,23 @@ pub struct InjectionDetail {
     pub grounding_id: Option<String>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub formatted_output: String,
+    /// Cited memory items (`m1`..`m5`) and the entities they resolved to.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub memory_items: Vec<crate::memory_recall::CitedItem>,
     pub feedback: Vec<FeedbackRecord>,
 }
 
-const VALID_RATINGS: &[&str] = &["useful", "noise", "harmful"];
+/// `used` is per cited item: the agent acted on that memory item.
+pub const VALID_RATINGS: &[&str] = &["useful", "noise", "harmful", "used"];
+
+/// `m1`..`m99`: the per-injection item ids bobbin prints for memory items.
+#[must_use]
+pub fn is_valid_item(item: &str) -> bool {
+    let Some(n) = item.strip_prefix('m') else {
+        return false;
+    };
+    !n.is_empty() && n.len() <= 2 && !n.starts_with('0') && n.bytes().all(|b| b.is_ascii_digit())
+}
 
 impl FeedbackStore {
     /// Open or create a feedback store at the given path.
@@ -240,6 +288,41 @@ impl FeedbackStore {
                 self.conn.execute_batch(ddl)?;
             }
         }
+
+        // Per-item citations (aegis-gshu.2): what each `m<n>` in an injection
+        // resolved to, so a rating on (injection_id, item) lands on an entity.
+        self.conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS injection_items (
+                injection_id TEXT NOT NULL,
+                item TEXT NOT NULL,
+                iri TEXT NOT NULL,
+                kind TEXT,
+                natural_key TEXT,
+                line TEXT,
+                PRIMARY KEY (injection_id, item)
+            );
+            CREATE INDEX IF NOT EXISTS idx_injection_items_iri ON injection_items(iri);
+        "#,
+        )?;
+        for (col, ddl) in [
+            ("item", "ALTER TABLE feedback ADD COLUMN item TEXT;"),
+            ("iri", "ALTER TABLE feedback ADD COLUMN iri TEXT;"),
+        ] {
+            let has_col: bool = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('feedback') WHERE name = ?1",
+                    [col],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            if !has_col {
+                self.conn.execute_batch(ddl)?;
+            }
+        }
+        self.conn
+            .execute_batch("CREATE INDEX IF NOT EXISTS idx_feedback_iri ON feedback(iri);")?;
 
         // Index for bundle/bead grouping queries
         self.conn.execute_batch(
@@ -358,6 +441,54 @@ impl FeedbackStore {
         Ok(())
     }
 
+    /// Log the cited memory items of an injection (`m1`..`m5` -> entity IRI).
+    pub fn store_injection_items(
+        &self,
+        injection_id: &str,
+        items: &[crate::memory_recall::CitedItem],
+    ) -> Result<()> {
+        if injection_id.is_empty() {
+            anyhow::bail!("injection_id is required");
+        }
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.fZ")
+            .to_string();
+        self.conn.execute(
+            "INSERT OR IGNORE INTO injections (injection_id, timestamp) VALUES (?1, ?2)",
+            rusqlite::params![injection_id, now],
+        )?;
+        for it in items {
+            if !is_valid_item(&it.item) {
+                anyhow::bail!("invalid item id '{}' (expected m1..m5)", it.item);
+            }
+            self.conn.execute(
+                "INSERT OR REPLACE INTO injection_items (injection_id, item, iri, kind, natural_key, line) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![injection_id, it.item, it.iri, it.kind, it.natural_key, it.line],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Cited items logged for an injection, in item order.
+    pub fn injection_items(
+        &self,
+        injection_id: &str,
+    ) -> Result<Vec<crate::memory_recall::CitedItem>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT item, iri, COALESCE(kind, ''), COALESCE(natural_key, ''), COALESCE(line, '') FROM injection_items WHERE injection_id = ?1 ORDER BY CAST(SUBSTR(item, 2) AS INTEGER)",
+        )?;
+        let rows = stmt.query_map([injection_id], |row| {
+            Ok(crate::memory_recall::CitedItem {
+                item: row.get(0)?,
+                iri: row.get(1)?,
+                kind: row.get(2)?,
+                natural_key: row.get(3)?,
+                line: row.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
     /// Store feedback for an injection.
     pub fn store_feedback(&self, input: &FeedbackInput) -> Result<i64> {
         if !VALID_RATINGS.contains(&input.rating.as_str()) {
@@ -369,6 +500,19 @@ impl FeedbackStore {
         }
         if input.injection_id.is_empty() {
             anyhow::bail!("injection_id is required");
+        }
+        let item = input
+            .item
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        if let Some(item) = item {
+            if !is_valid_item(item) {
+                anyhow::bail!("Invalid item '{item}': expected a cited item id like m1..m5");
+            }
+        }
+        if input.rating == "used" && item.is_none() {
+            anyhow::bail!("Invalid rating 'used' without item: 'used' rates one cited memory item (item = m1..m5)");
         }
 
         // Explicitly set timestamp — older DB schemas may lack DEFAULT clauses.
@@ -383,9 +527,23 @@ impl FeedbackStore {
             rusqlite::params![input.injection_id, now],
         )?;
 
+        // Resolve (injection_id, item) to the entity it cited. An item the
+        // injection never logged is kept (the rating still counts) with no IRI.
+        let iri: Option<String> = match item {
+            Some(item) => self
+                .conn
+                .query_row(
+                    "SELECT iri FROM injection_items WHERE injection_id = ?1 AND item = ?2",
+                    rusqlite::params![input.injection_id, item],
+                    |row| row.get(0),
+                )
+                .ok(),
+            None => None,
+        };
+
         self.conn.execute(
-            "INSERT INTO feedback (injection_id, timestamp, agent, rating, reason) VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![input.injection_id, now, input.agent, input.rating, input.reason],
+            "INSERT INTO feedback (injection_id, timestamp, agent, rating, reason, item, iri) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![input.injection_id, now, input.agent, input.rating, input.reason, item, iri],
         )?;
 
         Ok(self.conn.last_insert_rowid())
@@ -395,7 +553,7 @@ impl FeedbackStore {
     pub fn list_feedback(&self, query: &FeedbackQuery) -> Result<Vec<FeedbackRecord>> {
         let limit = query.limit.unwrap_or(20).min(50);
         let mut sql = String::from(
-            "SELECT id, injection_id, timestamp, agent, rating, reason FROM feedback WHERE 1=1",
+            "SELECT id, injection_id, timestamp, agent, rating, reason, item, iri FROM feedback WHERE 1=1",
         );
         let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
@@ -429,6 +587,8 @@ impl FeedbackStore {
                 agent: row.get(3)?,
                 rating: row.get(4)?,
                 reason: row.get(5)?,
+                item: row.get(6)?,
+                iri: row.get(7)?,
             })
         })?;
 
@@ -488,16 +648,64 @@ impl FeedbackStore {
             .unwrap_or(0) as u64;
         let unactioned = total_feedback.saturating_sub(actioned);
 
+        let used: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM feedback WHERE rating = 'used'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )? as u64;
+        let item_feedback: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM feedback WHERE item IS NOT NULL",
+            [],
+            |row| row.get::<_, i64>(0),
+        )? as u64;
+        let memory_entities = self.entity_usage(20)?;
+
         Ok(FeedbackStats {
             total_injections,
             total_feedback,
             useful,
             noise,
             harmful,
+            used,
+            item_feedback,
+            memory_entities,
             actioned,
             unactioned,
             lineage_records,
         })
+    }
+
+    /// Per-entity usage of cited memory items, most injected first.
+    pub fn entity_usage(&self, limit: usize) -> Result<Vec<EntityUsage>> {
+        let mut stmt = self.conn.prepare(
+            r#"SELECT ii.iri,
+                      COALESCE(MAX(ii.kind), ''),
+                      COUNT(DISTINCT ii.injection_id || '/' || ii.item),
+                      COUNT(DISTINCT CASE WHEN f.rating = 'used' THEN f.id END),
+                      COUNT(DISTINCT CASE WHEN f.rating = 'useful' THEN f.id END),
+                      COUNT(DISTINCT CASE WHEN f.rating = 'noise' THEN f.id END),
+                      COUNT(DISTINCT CASE WHEN f.rating = 'harmful' THEN f.id END),
+                      MAX(CASE WHEN f.rating = 'used' THEN f.timestamp END)
+               FROM injection_items ii
+               LEFT JOIN feedback f
+                 ON f.injection_id = ii.injection_id AND f.item = ii.item
+               GROUP BY ii.iri
+               ORDER BY 3 DESC, 4 DESC, ii.iri
+               LIMIT ?1"#,
+        )?;
+        let rows = stmt.query_map([limit as i64], |row| {
+            Ok(EntityUsage {
+                iri: row.get(0)?,
+                kind: row.get(1)?,
+                injected: row.get::<_, i64>(2)? as u64,
+                used: row.get::<_, i64>(3)? as u64,
+                useful: row.get::<_, i64>(4)? as u64,
+                noise: row.get::<_, i64>(5)? as u64,
+                harmful: row.get::<_, i64>(6)? as u64,
+                last_used: row.get(7)?,
+            })
+        })?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
     /// Get feedback statistics grouped by bundle name.
@@ -733,6 +941,7 @@ impl FeedbackStore {
             scope: row.get(9)?,
             faction_id: row.get(10)?,
             grounding_id: row.get(11)?,
+            memory_items: self.injection_items(injection_id).unwrap_or_default(),
             feedback,
         }))
     }
@@ -892,6 +1101,7 @@ mod tests {
             agent: "aegis/crew/test".to_string(),
             rating: "useful".to_string(),
             reason: "helped find the right file".to_string(),
+            item: None,
         };
         let id = store.store_feedback(&input).unwrap();
         assert!(id > 0);
@@ -910,6 +1120,7 @@ mod tests {
             agent: "test".to_string(),
             rating: "bad".to_string(),
             reason: String::new(),
+            item: None,
         };
         assert!(store.store_feedback(&input).is_err());
     }
@@ -928,6 +1139,7 @@ mod tests {
                     agent: "test".to_string(),
                     rating: rating.to_string(),
                     reason: String::new(),
+                    item: None,
                 })
                 .unwrap();
         }
@@ -949,6 +1161,7 @@ mod tests {
                     agent: "test".to_string(),
                     rating: rating.to_string(),
                     reason: String::new(),
+                    item: None,
                 })
                 .unwrap();
         }
@@ -968,6 +1181,7 @@ mod tests {
             agent: "test".to_string(),
             rating: "useful".to_string(),
             reason: "reaction context was helpful".to_string(),
+            item: None,
         };
         store.store_feedback(&input).unwrap();
         let records = store
@@ -1007,6 +1221,7 @@ mod tests {
                 agent: "test".to_string(),
                 rating: "useful".to_string(),
                 reason: "found the auth module".to_string(),
+                item: None,
             })
             .unwrap();
         let stats = store.stats().unwrap();
@@ -1034,6 +1249,7 @@ mod tests {
                 agent: "aegis/crew/ellie".to_string(),
                 rating: "useful".to_string(),
                 reason: "great context".to_string(),
+                item: None,
             })
             .unwrap();
 
@@ -1060,6 +1276,7 @@ mod tests {
                 agent: "test".to_string(),
                 rating: "noise".to_string(),
                 reason: "init function noise".to_string(),
+                item: None,
             })
             .unwrap();
         let fid2 = store
@@ -1068,6 +1285,7 @@ mod tests {
                 agent: "test".to_string(),
                 rating: "noise".to_string(),
                 reason: "init function noise".to_string(),
+                item: None,
             })
             .unwrap();
 
@@ -1119,6 +1337,7 @@ mod tests {
                 agent: "test".to_string(),
                 rating: "noise".to_string(),
                 reason: "noise".to_string(),
+                item: None,
             })
             .unwrap();
         let _fid2 = store
@@ -1127,6 +1346,7 @@ mod tests {
                 agent: "test".to_string(),
                 rating: "noise".to_string(),
                 reason: "noise".to_string(),
+                item: None,
             })
             .unwrap();
 
@@ -1163,6 +1383,7 @@ mod tests {
                 agent: "test".to_string(),
                 rating: "noise".to_string(),
                 reason: "test".to_string(),
+                item: None,
             })
             .unwrap();
         let result = store.store_lineage(&LineageInput {
@@ -1185,6 +1406,7 @@ mod tests {
                 agent: "test".to_string(),
                 rating: "noise".to_string(),
                 reason: "test".to_string(),
+                item: None,
             })
             .unwrap();
 
@@ -1239,6 +1461,7 @@ mod tests {
                 agent: "agent-b".to_string(),
                 rating: "useful".to_string(),
                 reason: String::new(),
+                item: None,
             })
             .unwrap();
 
@@ -1281,6 +1504,7 @@ mod tests {
                 agent: "agent-c".to_string(),
                 rating: "harmful".to_string(),
                 reason: "wrong file".to_string(),
+                item: None,
             })
             .unwrap();
 
@@ -1316,6 +1540,7 @@ mod tests {
                 agent: "agent-b".to_string(),
                 rating: "useful".to_string(),
                 reason: String::new(),
+                item: None,
             })
             .unwrap();
 
@@ -1353,6 +1578,7 @@ mod tests {
                 agent: "agent-b".to_string(),
                 rating: "useful".to_string(),
                 reason: String::new(),
+                item: None,
             })
             .unwrap();
 
@@ -1362,6 +1588,7 @@ mod tests {
                 agent: "agent-c".to_string(),
                 rating: "useful".to_string(),
                 reason: String::new(),
+                item: None,
             })
             .unwrap();
 
@@ -1446,6 +1673,7 @@ mod tests {
                 agent: "test".into(),
                 rating: "useful".into(),
                 reason: String::new(),
+                item: None,
             })
             .unwrap();
         store
@@ -1454,6 +1682,7 @@ mod tests {
                 agent: "test".into(),
                 rating: "noise".into(),
                 reason: String::new(),
+                item: None,
             })
             .unwrap();
         store
@@ -1462,6 +1691,7 @@ mod tests {
                 agent: "test".into(),
                 rating: "useful".into(),
                 reason: String::new(),
+                item: None,
             })
             .unwrap();
 
@@ -1536,6 +1766,7 @@ mod tests {
                 agent: "test".into(),
                 rating: "useful".into(),
                 reason: String::new(),
+                item: None,
             })
             .unwrap();
         store
@@ -1544,6 +1775,7 @@ mod tests {
                 agent: "test".into(),
                 rating: "harmful".into(),
                 reason: String::new(),
+                item: None,
             })
             .unwrap();
 
@@ -1582,6 +1814,7 @@ mod tests {
                 agent: "agent".into(),
                 rating: "useful".into(),
                 reason: "matched the turn".into(),
+                item: None,
             })
             .unwrap();
         let detail = store.get_injection("inj-na").unwrap().unwrap();
@@ -1607,5 +1840,106 @@ mod tests {
             Some("sha256:abc"),
         );
         assert!(result.is_err());
+    }
+
+    fn cited(item: &str, iri: &str) -> crate::memory_recall::CitedItem {
+        crate::memory_recall::CitedItem {
+            item: item.into(),
+            iri: iri.into(),
+            kind: "Decision".into(),
+            natural_key: format!("{iri}-key"),
+            line: format!("[{item}] Decision: x"),
+        }
+    }
+
+    fn rate(store: &FeedbackStore, inj: &str, rating: &str, item: Option<&str>) -> Result<i64> {
+        store.store_feedback(&FeedbackInput {
+            injection_id: inj.into(),
+            agent: "test".into(),
+            rating: rating.into(),
+            reason: String::new(),
+            item: item.map(String::from),
+        })
+    }
+
+    #[test]
+    fn item_feedback_resolves_to_the_cited_entity() {
+        let (store, _f) = temp_store();
+        store
+            .store_injection_items(
+                "inj-m",
+                &[cited("m1", "urn:mem/a"), cited("m2", "urn:mem/b")],
+            )
+            .unwrap();
+        assert_eq!(store.injection_items("inj-m").unwrap().len(), 2);
+
+        rate(&store, "inj-m", "used", Some("m1")).unwrap();
+        rate(&store, "inj-m", "noise", Some("m2")).unwrap();
+        rate(&store, "inj-m", "useful", None).unwrap();
+        // An item the injection never logged still records, with no IRI.
+        rate(&store, "inj-m", "used", Some("m5")).unwrap();
+
+        let records = store.list_feedback(&FeedbackQuery::default()).unwrap();
+        let m1 = records
+            .iter()
+            .find(|r| r.item.as_deref() == Some("m1"))
+            .unwrap();
+        assert_eq!(m1.iri.as_deref(), Some("urn:mem/a"));
+        assert_eq!(m1.rating, "used");
+        let m5 = records
+            .iter()
+            .find(|r| r.item.as_deref() == Some("m5"))
+            .unwrap();
+        assert!(m5.iri.is_none());
+
+        let stats = store.stats().unwrap();
+        assert_eq!(stats.used, 2);
+        assert_eq!(stats.item_feedback, 3);
+        let a = stats
+            .memory_entities
+            .iter()
+            .find(|e| e.iri == "urn:mem/a")
+            .unwrap();
+        assert_eq!((a.injected, a.used, a.noise), (1, 1, 0));
+        assert!(a.last_used.is_some());
+        let b = stats
+            .memory_entities
+            .iter()
+            .find(|e| e.iri == "urn:mem/b")
+            .unwrap();
+        assert_eq!((b.injected, b.used, b.noise), (1, 0, 1));
+    }
+
+    #[test]
+    fn used_needs_an_item_and_items_are_validated() {
+        let (store, _f) = temp_store();
+        let err = rate(&store, "inj-x", "used", None).unwrap_err();
+        assert!(err.to_string().contains("Invalid rating 'used'"));
+        let err = rate(&store, "inj-x", "useful", Some("item1")).unwrap_err();
+        assert!(err.to_string().contains("Invalid item"));
+        assert!(is_valid_item("m1") && is_valid_item("m12"));
+        assert!(
+            !is_valid_item("m0")
+                && !is_valid_item("m")
+                && !is_valid_item("m123")
+                && !is_valid_item("x1")
+        );
+    }
+
+    #[test]
+    fn older_feedback_db_gains_item_columns() {
+        let f = NamedTempFile::new().unwrap();
+        {
+            let conn = Connection::open(f.path()).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, injection_id TEXT NOT NULL, timestamp TEXT NOT NULL, agent TEXT NOT NULL, rating TEXT NOT NULL, reason TEXT DEFAULT '');
+                 INSERT INTO feedback (injection_id, timestamp, agent, rating) VALUES ('inj-old', '2026-01-01T00:00:00Z', 'a', 'useful');",
+            )
+            .unwrap();
+        }
+        let store = FeedbackStore::open(f.path()).unwrap();
+        let records = store.list_feedback(&FeedbackQuery::default()).unwrap();
+        assert_eq!(records.len(), 1);
+        assert!(records[0].item.is_none());
     }
 }

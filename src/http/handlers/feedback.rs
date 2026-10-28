@@ -78,6 +78,36 @@ pub(super) async fn injection_store(
 }
 
 /// GET /injections/:id — get injection detail with associated feedback
+#[derive(Deserialize)]
+pub(super) struct InjectionItemsInput {
+    #[serde(default)]
+    items: Vec<crate::memory_recall::CitedItem>,
+}
+
+/// Log the cited memory items (`m1`..`m5` -> entity IRI) of an injection, so
+/// item-level feedback can resolve to an entity (aegis-gshu.2).
+pub(super) async fn injection_items_store(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(input): Json<InjectionItemsInput>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorBody>)> {
+    let store = open_feedback_store(&state).map_err(internal_error)?;
+    store
+        .store_injection_items(&id, &input.items)
+        .map_err(|e| {
+            if e.to_string().contains("invalid item") || e.to_string().contains("required") {
+                bad_request(e.to_string())
+            } else {
+                internal_error(e)
+            }
+        })?;
+    Ok(Json(serde_json::json!({
+        "status": "ok",
+        "injection_id": id,
+        "items": input.items.len(),
+    })))
+}
+
 pub(super) async fn injection_detail(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -100,15 +130,23 @@ pub(super) async fn feedback_submit(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorBody>)> {
     let store = open_feedback_store(&state).map_err(internal_error)?;
     store.store_feedback(&input).map_err(|e| {
-        if e.to_string().contains("Invalid rating") || e.to_string().contains("required") {
+        let msg = e.to_string();
+        if msg.contains("Invalid rating")
+            || msg.contains("Invalid item")
+            || msg.contains("required")
+        {
             bad_request(e.to_string())
         } else {
             internal_error(e)
         }
     })?;
+    let target = match input.item.as_deref() {
+        Some(item) => format!("{} {}", input.injection_id, item),
+        None => input.injection_id.clone(),
+    };
     Ok(Json(serde_json::json!({
         "status": "ok",
-        "message": format!("Feedback recorded: {} for {}", input.rating, input.injection_id)
+        "message": format!("Feedback recorded: {} for {}", input.rating, target)
     })))
 }
 

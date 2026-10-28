@@ -1082,11 +1082,18 @@ pub struct FeedbackSubmitRequest {
     )]
     pub injection_id: String,
 
-    /// Rating: useful, noise, or harmful
+    /// Rating: useful, noise, harmful, or used (per cited memory item)
     #[schemars(
-        description = "Rating for the injection quality: 'useful' (helped with task), 'noise' (irrelevant), or 'harmful' (actively misleading)"
+        description = "Rating: 'useful' (helped with task), 'noise' (irrelevant), 'harmful' (actively misleading), or 'used' (you acted on the cited memory item; needs item)"
     )]
     pub rating: String,
+
+    /// Cited memory item inside the injection (m1..m5), from the `[m<n>]` tags
+    #[serde(default)]
+    #[schemars(
+        description = "Optional cited memory item id (m1..m5) from the '[m<n>]' lines of the injection's memory block. Rates that one item instead of the whole injection. Required for rating 'used'."
+    )]
+    pub item: Option<String>,
 
     /// Agent identity (auto-detected from GT_ROLE or BD_ACTOR env vars if empty)
     #[schemars(description = "Agent identity (auto-detected from environment if omitted)")]

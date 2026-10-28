@@ -2513,7 +2513,7 @@ impl BobbinMcpServer {
 
     /// Submit feedback on a bobbin context injection
     #[tool(
-        description = "Submit feedback on a bobbin context injection. Rate injections as 'useful' (helped with task), 'noise' (irrelevant to current work), or 'harmful' (actively misleading). Reference the injection_id shown in [injection_id: inj-xxx] from the context injection output. Supports both standard (inj-xxx) and reaction (inj-react-xxx) injection IDs.",
+        description = "Submit feedback on a bobbin context injection. Rate injections as 'useful' (helped with task), 'noise' (irrelevant to current work), or 'harmful' (actively misleading). Reference the injection_id shown in [injection_id: inj-xxx] from the context injection output. Supports both standard (inj-xxx) and reaction (inj-react-xxx) injection IDs. To rate one cited memory item, pass item (m1..m5 from the '[m<n>]' lines); rating 'used' means you acted on that item.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -2532,12 +2532,30 @@ impl BobbinMcpServer {
             )]));
         }
 
-        let valid_ratings = ["useful", "noise", "harmful"];
+        let valid_ratings = crate::storage::feedback::VALID_RATINGS;
         if !valid_ratings.contains(&req.rating.as_str()) {
             return Ok(CallToolResult::success(vec![Content::text(format!(
                 "Error: rating must be one of: {}",
                 valid_ratings.join(", ")
             ))]));
+        }
+        let item = req
+            .item
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from);
+        if let Some(ref it) = item {
+            if !crate::storage::feedback::is_valid_item(it) {
+                return Ok(CallToolResult::success(vec![Content::text(format!(
+                    "Error: item '{it}' is not a cited item id (expected m1..m5 from the [m<n>] lines)"
+                ))]));
+            }
+        }
+        if req.rating == "used" && item.is_none() {
+            return Ok(CallToolResult::success(vec![Content::text(
+                "Error: rating 'used' rates one cited memory item; pass item (m1..m5)",
+            )]));
         }
 
         let agent = req.agent.unwrap_or_else(|| {
@@ -2559,6 +2577,7 @@ impl BobbinMcpServer {
                 rating: req.rating.clone(),
                 agent: Some(agent.clone()),
                 reason: Some(reason.clone()),
+                item: item.clone(),
             };
             return remote.feedback_submit(&forwarded, &agent).await;
         }
@@ -2568,6 +2587,7 @@ impl BobbinMcpServer {
             agent,
             rating: req.rating.clone(),
             reason,
+            item: item.clone(),
         };
 
         let store = self
@@ -2578,9 +2598,13 @@ impl BobbinMcpServer {
             .store_feedback(&input)
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
+        let target = match &item {
+            Some(it) => format!("{injection_id} {it}"),
+            None => injection_id.clone(),
+        };
         Ok(CallToolResult::success(vec![Content::text(format!(
             "Feedback recorded: {} for {}",
-            req.rating, injection_id
+            req.rating, target
         ))]))
     }
 
@@ -2630,7 +2654,14 @@ impl BobbinMcpServer {
             } else {
                 &r.timestamp
             };
-            let mut line = format!("[{}] {} | {} | {}", r.injection_id, ts, r.rating, r.agent);
+            let id = match &r.item {
+                Some(it) => format!("{} {}", r.injection_id, it),
+                None => r.injection_id.clone(),
+            };
+            let mut line = format!("[{}] {} | {} | {}", id, ts, r.rating, r.agent);
+            if let Some(iri) = &r.iri {
+                line.push_str(&format!(" | {iri}"));
+            }
             if !r.reason.is_empty() {
                 let truncated: String = r.reason.chars().take(100).collect();
                 line.push_str(&format!(" | {}", truncated));
@@ -2714,15 +2745,28 @@ impl BobbinMcpServer {
                     "N/A".to_string()
                 };
 
-                let text = format!(
-                    "Injections: {}\nFeedback: {} ({} coverage)\n  useful: {}\n  noise: {}\n  harmful: {}",
+                let mut text = format!(
+                    "Injections: {}\nFeedback: {} ({} coverage)\n  useful: {}\n  noise: {}\n  harmful: {}\n  used: {}",
                     stats.total_injections,
                     stats.total_feedback,
                     rate,
                     stats.useful,
                     stats.noise,
-                    stats.harmful
+                    stats.harmful,
+                    stats.used
                 );
+                if !stats.memory_entities.is_empty() {
+                    text.push_str(&format!(
+                        "\nMemory items: {} item ratings\n  {:<9} {:>4} {:>6} {:>5} {:>7}  entity",
+                        stats.item_feedback, "kind", "inj", "used", "noise", "harmful"
+                    ));
+                    for e in &stats.memory_entities {
+                        text.push_str(&format!(
+                            "\n  {:<9} {:>4} {:>6} {:>5} {:>7}  {}",
+                            e.kind, e.injected, e.used, e.noise, e.harmful, e.iri
+                        ));
+                    }
+                }
 
                 if stats.lineage_records > 0 || stats.actioned > 0 {
                     let text = format!(

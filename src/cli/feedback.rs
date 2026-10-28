@@ -18,9 +18,13 @@ enum FeedbackCommand {
         #[arg(long)]
         injection: String,
 
-        /// Rating: useful, noise, or harmful
+        /// Rating: useful, noise, harmful, or used (used needs --item)
         #[arg(long)]
         rating: String,
+
+        /// Cited memory item (m1..m5) inside the injection, to rate one item
+        #[arg(long)]
+        item: Option<String>,
 
         /// Optional reason for the rating
         #[arg(long, default_value = "")]
@@ -137,6 +141,7 @@ pub async fn run(args: FeedbackArgs, output: OutputConfig) -> Result<()> {
         FeedbackCommand::Submit {
             injection,
             rating,
+            item,
             reason,
             agent,
         } => {
@@ -145,6 +150,7 @@ pub async fn run(args: FeedbackArgs, output: OutputConfig) -> Result<()> {
                 agent: agent.clone(),
                 rating: rating.clone(),
                 reason: reason.clone(),
+                item: item.clone(),
             };
             store.store_feedback(&input)?;
             if !output.quiet {
@@ -188,11 +194,15 @@ pub async fn run(args: FeedbackArgs, output: OutputConfig) -> Result<()> {
                     println!(
                         "{} {} {} {} {}",
                         format!("#{}", r.id).dimmed(),
-                        r.injection_id.cyan(),
+                        match &r.item {
+                            Some(it) => format!("{} {}", r.injection_id, it).cyan(),
+                            None => r.injection_id.cyan(),
+                        },
                         match r.rating.as_str() {
                             "useful" => r.rating.green(),
                             "noise" => r.rating.yellow(),
                             "harmful" => r.rating.red(),
+                            "used" => r.rating.blue(),
                             _ => r.rating.normal(),
                         },
                         r.agent.dimmed(),
@@ -245,11 +255,18 @@ pub async fn run(args: FeedbackArgs, output: OutputConfig) -> Result<()> {
                     println!("  Injections:  {}", stats.total_injections);
                     println!("  Feedback:    {}", stats.total_feedback);
                     println!(
-                        "  Ratings:     {} useful, {} noise, {} harmful",
+                        "  Ratings:     {} useful, {} noise, {} harmful, {} used",
                         format!("{}", stats.useful).green(),
                         format!("{}", stats.noise).yellow(),
                         format!("{}", stats.harmful).red(),
+                        format!("{}", stats.used).blue(),
                     );
+                    for e in &stats.memory_entities {
+                        println!(
+                            "  memory {:<9} inj {:>3} used {:>3} noise {:>3}  {}",
+                            e.kind, e.injected, e.used, e.noise, e.iri
+                        );
+                    }
                     println!(
                         "  Lineage:     {} actioned, {} unactioned, {} records",
                         stats.actioned, stats.unactioned, stats.lineage_records
@@ -352,11 +369,12 @@ async fn run_remote(args: FeedbackArgs, output: OutputConfig, server_url: &str) 
         FeedbackCommand::Submit {
             injection,
             rating,
+            item,
             reason,
             agent,
         } => {
             let resp = client
-                .feedback_submit(&injection, &rating, &reason, &agent)
+                .feedback_submit(&injection, &rating, &reason, &agent, item.as_deref())
                 .await?;
             if output.json {
                 println!("{}", serde_json::to_string(&resp)?);
@@ -392,11 +410,15 @@ async fn run_remote(args: FeedbackArgs, output: OutputConfig, server_url: &str) 
                     println!(
                         "{} {} {} {} {}",
                         format!("#{}", r.id).dimmed(),
-                        r.injection_id.cyan(),
+                        match &r.item {
+                            Some(it) => format!("{} {}", r.injection_id, it).cyan(),
+                            None => r.injection_id.cyan(),
+                        },
                         match r.rating.as_str() {
                             "useful" => r.rating.green(),
                             "noise" => r.rating.yellow(),
                             "harmful" => r.rating.red(),
+                            "used" => r.rating.blue(),
                             _ => r.rating.normal(),
                         },
                         r.agent.dimmed(),
@@ -446,11 +468,18 @@ async fn run_remote(args: FeedbackArgs, output: OutputConfig, server_url: &str) 
                     println!("  Injections:  {}", stats.total_injections);
                     println!("  Feedback:    {}", stats.total_feedback);
                     println!(
-                        "  Ratings:     {} useful, {} noise, {} harmful",
+                        "  Ratings:     {} useful, {} noise, {} harmful, {} used",
                         format!("{}", stats.useful).green(),
                         format!("{}", stats.noise).yellow(),
                         format!("{}", stats.harmful).red(),
+                        format!("{}", stats.used).blue(),
                     );
+                    for e in &stats.memory_entities {
+                        println!(
+                            "  memory {:<9} inj {:>3} used {:>3} noise {:>3}  {}",
+                            e.kind, e.injected, e.used, e.noise, e.iri
+                        );
+                    }
                     println!(
                         "  Lineage:     {} actioned, {} unactioned, {} records",
                         stats.actioned, stats.unactioned, stats.lineage_records

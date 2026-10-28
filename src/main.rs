@@ -15,6 +15,9 @@ mod iri;
 #[cfg(feature = "knowledge")]
 mod knowledge;
 mod mcp;
+/// Per-prompt recall of camayoc memory entities from a local mirror
+/// (aegis-gshu.2), injected as its own lane of the UserPromptSubmit hook.
+pub mod memory_recall;
 mod metrics;
 mod operational_metrics;
 /// The agent's current work item, published by the harness and read (never
