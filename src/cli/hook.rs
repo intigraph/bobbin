@@ -16,6 +16,8 @@ use crate::storage::{MetadataStore, VectorStore};
 mod breadcrumb_triggers;
 #[path = "hook_breadcrumbs.rs"]
 mod breadcrumbs;
+#[path = "hook_memory.rs"]
+mod hook_memory;
 #[path = "hook_primer.rs"]
 mod primer;
 use primer::extract_brief;
@@ -62,6 +64,33 @@ fn detect_server_repo_name(dir: &Path) -> Option<String> {
     // Fallback: use git root dir name
     detect_repo_name(dir)
 }
+
+/// Operational prompts that never need context (git, cargo, slash commands...).
+/// Shared by the local and remote inject paths and the memory step.
+const BUILTIN_SKIP_PREFIXES: &[&str] = &[
+    "git ",
+    "git push",
+    "git pull",
+    "git status",
+    "git diff",
+    "git log",
+    "git commit",
+    "git add",
+    "git stash",
+    "git rebase",
+    "git merge",
+    "bd ",
+    "gt ",
+    "cargo ",
+    "go test",
+    "go build",
+    "go run",
+    "npm ",
+    "make ",
+    "docker ",
+    "kubectl ",
+    "/", // Slash commands (Claude Code skills)
+];
 
 /// Strip XML tag blocks from prompt text that pollute semantic search.
 /// System boilerplate, tool schemas, previous injections, and tool call output
@@ -335,6 +364,10 @@ enum HookCommands {
 
     /// Generate hot-topics.md from injection frequency data
     HotTopics(HotTopicsArgs),
+
+    /// Refresh the local memory mirror from quipu (spawned by inject-context
+    /// when the mirror is stale; also safe from cron or a chaski event)
+    MemoryRefresh(hook_memory::MemoryRefreshArgs),
 }
 
 #[derive(Args)]
@@ -582,6 +615,7 @@ pub async fn run(args: HookArgs, output: OutputConfig) -> Result<()> {
         HookCommands::InstallGitHook(a) => run_install_git_hook(a, output).await,
         HookCommands::UninstallGitHook(a) => run_uninstall_git_hook(a, output).await,
         HookCommands::HotTopics(a) => run_hot_topics(a, output).await,
+        HookCommands::MemoryRefresh(a) => hook_memory::run_refresh(a, output).await,
     }
 }
 
@@ -1078,24 +1112,32 @@ async fn run_status(args: StatusArgs, output: OutputConfig) -> Result<()> {
 }
 
 async fn run_inject_context(args: InjectContextArgs, output: OutputConfig) -> Result<()> {
+    // stdin is read once: the file-context step and the memory step below both
+    // need the hook input.
+    let raw = match std::io::read_to_string(std::io::stdin()) {
+        Ok(raw) => raw,
+        Err(e) => {
+            eprintln!("bobbin inject-context: failed to read stdin: {e}");
+            return Ok(());
+        }
+    };
+    let memory_overrides = hook_memory::Overrides {
+        min_prompt_length: args.min_prompt_length,
+        budget: args.budget,
+    };
     // Route to remote handler if --server is set
     if let Some(ref server_url) = output.server {
-        return match inject_context_remote(args, &output, server_url).await {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                eprintln!("bobbin inject-context (remote): {:#}", e);
-                Ok(())
-            }
-        };
-    }
-    // Never block user prompts — any error exits silently
-    match inject_context_inner(args).await {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            eprintln!("bobbin inject-context: {:#}", e);
-            Ok(())
+        if let Err(e) = inject_context_remote(args, &output, server_url, &raw).await {
+            eprintln!("bobbin inject-context (remote): {:#}", e);
         }
+    } else if let Err(e) = inject_context_inner(args, &raw).await {
+        // Never block user prompts — any error exits silently
+        eprintln!("bobbin inject-context: {:#}", e);
     }
+    // Memory recall (aegis-gshu.2): its own lane inside the same injection,
+    // read from the local mirror only. Never fails the hook.
+    hook_memory::run(&raw, &memory_overrides, output.server.as_deref()).await;
+    Ok(())
 }
 
 /// Remote-server implementation of inject-context.
@@ -1104,10 +1146,10 @@ async fn inject_context_remote(
     args: InjectContextArgs,
     output: &OutputConfig,
     server_url: &str,
+    raw: &str,
 ) -> Result<()> {
-    // 1. Read stdin JSON
-    let input: HookInput =
-        serde_json::from_reader(std::io::stdin().lock()).context("Failed to parse stdin JSON")?;
+    // 1. Parse the hook input (read once by the caller)
+    let input: HookInput = serde_json::from_str(raw).context("Failed to parse stdin JSON")?;
 
     // 2. Load config for hook settings (use defaults if not found)
     let cwd = if input.cwd.is_empty() {
@@ -1170,30 +1212,6 @@ async fn inject_context_remote(
     // 3b. Check skip prefixes (operational commands that never need context).
     // Built-in prefixes always apply; user-configured prefixes extend them.
     let prompt_lower = prompt.to_lowercase();
-    const BUILTIN_SKIP_PREFIXES: &[&str] = &[
-        "git ",
-        "git push",
-        "git pull",
-        "git status",
-        "git diff",
-        "git log",
-        "git commit",
-        "git add",
-        "git stash",
-        "git rebase",
-        "git merge",
-        "bd ",
-        "gt ",
-        "cargo ",
-        "go test",
-        "go build",
-        "go run",
-        "npm ",
-        "make ",
-        "docker ",
-        "kubectl ",
-        "/", // Slash commands (Claude Code skills)
-    ];
     let matches_prefix = |pl: &str| -> bool {
         if pl.len() <= 5 && !pl.ends_with(' ') {
             prompt_lower == pl
@@ -2602,7 +2620,9 @@ fn generate_context_injection_id(query: &str) -> String {
             .to_le_bytes(),
     );
     let hash = hex::encode(hasher.finalize());
-    format!("inj-{}", &hash[..8])
+    let id = format!("inj-{}", &hash[..8]);
+    hook_memory::note_injection_id(&id);
+    id
 }
 
 /// Claude Code PostToolUse hook input
@@ -3493,16 +3513,15 @@ async fn run_hot_topics(args: HotTopicsArgs, _output: OutputConfig) -> Result<()
 }
 
 /// Inner implementation that can return errors (caller swallows them).
-async fn inject_context_inner(args: InjectContextArgs) -> Result<()> {
+async fn inject_context_inner(args: InjectContextArgs, raw: &str) -> Result<()> {
     use crate::index::Embedder;
     use crate::search::context::{BridgeMode, ContentMode, ContextAssembler, ContextConfig};
     use crate::storage::{MetadataStore, VectorStore};
 
     let hook_start = std::time::Instant::now();
 
-    // 1. Read stdin JSON
-    let input: HookInput =
-        serde_json::from_reader(std::io::stdin().lock()).context("Failed to parse stdin JSON")?;
+    // 1. Parse the hook input (read once by the caller)
+    let input: HookInput = serde_json::from_str(raw).context("Failed to parse stdin JSON")?;
 
     // 2. Resolve effective config
     let cwd = if input.cwd.is_empty() {
@@ -3553,30 +3572,6 @@ async fn inject_context_inner(args: InjectContextArgs) -> Result<()> {
     // 3b. Check skip prefixes (operational commands that never need context).
     // Built-in prefixes always apply; user-configured prefixes extend them.
     let prompt_lower = prompt.to_lowercase();
-    const BUILTIN_SKIP_PREFIXES_LOCAL: &[&str] = &[
-        "git ",
-        "git push",
-        "git pull",
-        "git status",
-        "git diff",
-        "git log",
-        "git commit",
-        "git add",
-        "git stash",
-        "git rebase",
-        "git merge",
-        "bd ",
-        "gt ",
-        "cargo ",
-        "go test",
-        "go build",
-        "go run",
-        "npm ",
-        "make ",
-        "docker ",
-        "kubectl ",
-        "/", // Slash commands (Claude Code skills)
-    ];
     let matches_prefix = |pl: &str| -> bool {
         if pl.len() <= 5 && !pl.ends_with(' ') {
             prompt_lower == pl
@@ -3584,9 +3579,7 @@ async fn inject_context_inner(args: InjectContextArgs) -> Result<()> {
             prompt_lower.starts_with(pl)
         }
     };
-    if BUILTIN_SKIP_PREFIXES_LOCAL
-        .iter()
-        .any(|p| matches_prefix(p))
+    if BUILTIN_SKIP_PREFIXES.iter().any(|p| matches_prefix(p))
         || hooks_cfg
             .skip_prefixes
             .iter()

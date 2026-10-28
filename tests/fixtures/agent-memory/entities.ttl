@@ -1,0 +1,101 @@
+# Fixture memory entities for bobbin's recall tests (aegis-gshu.2).
+# One current record per kind from camayoc docs/design/agent-memory-entities.md
+# section 2.2, plus a superseded Decision. Invented content; no real memory.
+# aegis:indexCursor / aegis:supersededCursor precompute the '<recordedAt>|<iri>'
+# cursor camayoc's mem_index_since builds with CONCAT, which the quipu 0.3.27
+# SPARQL engine bobbin tests against does not evaluate.
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://aegis.gastown.local/ontology/mem/decision/widget-service/rate-limit/20261001T120000Z>
+    a aegis:Decision ;
+    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/decision/widget-service/rate-limit> ;
+    rdfs:label "Widget service rate limit" ;
+    rdfs:comment "Chose 100 requests per minute over 50" ;
+    aegis:sourceKind "crew:declared" ;
+    aegis:recordedAt "2026-10-01T12:00:00Z" ;
+    aegis:supersededBy <http://aegis.gastown.local/ontology/mem/decision/widget-service/rate-limit/20261020T090000Z> ;
+    aegis:indexCursor "2026-10-01T12:00:00Z|http://aegis.gastown.local/ontology/mem/decision/widget-service/rate-limit/20261001T120000Z" ;
+    aegis:supersededCursor "2026-10-20T09:00:00Z|http://aegis.gastown.local/ontology/mem/decision/widget-service/rate-limit/20261001T120000Z" .
+
+<http://aegis.gastown.local/ontology/mem/decision/widget-service/rate-limit/20261020T090000Z>
+    a aegis:Decision ;
+    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/decision/widget-service/rate-limit> ;
+    rdfs:label "Widget service rate limit" ;
+    rdfs:comment "Chose 250 requests per minute over 100" ;
+    aegis:sourceKind "crew:declared" ;
+    aegis:recordedAt "2026-10-20T09:00:00Z" ;
+    aegis:supersedes <http://aegis.gastown.local/ontology/mem/decision/widget-service/rate-limit/20261001T120000Z> ;
+    aegis:indexCursor "2026-10-20T09:00:00Z|http://aegis.gastown.local/ontology/mem/decision/widget-service/rate-limit/20261020T090000Z" .
+
+<http://aegis.gastown.local/ontology/mem/directive/crew/deploy-window/20261002T000000Z>
+    a aegis:Directive ;
+    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/directive/crew/deploy-window> ;
+    rdfs:label "Deploy window" ;
+    rdfs:comment "Run disruptive deploys between 02:00 and 09:00 ET" ;
+    aegis:sourceKind "crew:declared" ;
+    aegis:recordedAt "2026-10-02T00:00:00Z" ;
+    aegis:indexCursor "2026-10-02T00:00:00Z|http://aegis.gastown.local/ontology/mem/directive/crew/deploy-window/20261002T000000Z" .
+
+<http://aegis.gastown.local/ontology/mem/preference/alex/email/sign-off/20261003T000000Z>
+    a aegis:Preference ;
+    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/preference/alex/email/sign-off> ;
+    rdfs:label "Email sign-off" ;
+    rdfs:comment "Sign emails with first name only; chat messages get no sign-off" ;
+    aegis:sourceKind "crew:declared" ;
+    aegis:recordedAt "2026-10-03T00:00:00Z" ;
+    aegis:indexCursor "2026-10-03T00:00:00Z|http://aegis.gastown.local/ontology/mem/preference/alex/email/sign-off/20261003T000000Z" .
+
+<http://aegis.gastown.local/ontology/mem/lesson/chrome-tools/vimium/20261004T000000Z>
+    a aegis:Lesson ;
+    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/lesson/chrome-tools/vimium> ;
+    rdfs:label "Vimium blocks typing in browser automation" ;
+    rdfs:comment "Press i for insert mode before typing into a page" ;
+    aegis:sourceKind "crew:inferred" ;
+    aegis:recordedAt "2026-10-04T00:00:00Z" ;
+    aegis:indexCursor "2026-10-04T00:00:00Z|http://aegis.gastown.local/ontology/mem/lesson/chrome-tools/vimium/20261004T000000Z" .
+
+<http://aegis.gastown.local/ontology/mem/reference/grafana/metrics-api/20261005T000000Z>
+    a aegis:Reference ;
+    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/reference/grafana/metrics-api> ;
+    rdfs:label "Grafana metrics API" ;
+    rdfs:comment "Query dashboards over the HTTP API with the key named GRAFANA_TOKEN in the secret store" ;
+    aegis:sourceKind "crew:observed" ;
+    aegis:recordedAt "2026-10-05T00:00:00Z" ;
+    aegis:indexCursor "2026-10-05T00:00:00Z|http://aegis.gastown.local/ontology/mem/reference/grafana/metrics-api/20261005T000000Z" .
+
+<http://aegis.gastown.local/ontology/mem/handoff/fixture-agent/20261006T000000Z>
+    a aegis:Handoff ;
+    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/handoff/fixture-agent> ;
+    rdfs:label "Handoff for fixture-agent" ;
+    rdfs:comment "Next: finish the parser migration review on PR 42" ;
+    aegis:sourceKind "crew:observed" ;
+    aegis:recordedAt "2026-10-06T00:00:00Z" ;
+    aegis:indexCursor "2026-10-06T00:00:00Z|http://aegis.gastown.local/ontology/mem/handoff/fixture-agent/20261006T000000Z" .
+
+<http://aegis.gastown.local/ontology/mem/incident/media-server/20261007T0300Z/20261007T030500Z>
+    a aegis:Incident ;
+    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/incident/media-server/20261007T0300Z> ;
+    rdfs:label "Media server indexer timeouts" ;
+    rdfs:comment "Indexer searches time out; restarting the media server clears it" ;
+    aegis:sourceKind "crew:observed" ;
+    aegis:recordedAt "2026-10-07T03:05:00Z" ;
+    aegis:indexCursor "2026-10-07T03:05:00Z|http://aegis.gastown.local/ontology/mem/incident/media-server/20261007T0300Z/20261007T030500Z" .
+
+<http://aegis.gastown.local/ontology/mem/finding/rdf-store/benchmark/20261008T000000Z>
+    a aegis:Finding ;
+    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/finding/rdf-store/benchmark> ;
+    rdfs:label "RDF store benchmark latency" ;
+    rdfs:comment "Median query latency fell 30 percent after the index rebuild" ;
+    aegis:sourceKind "crew:observed" ;
+    aegis:recordedAt "2026-10-08T00:00:00Z" ;
+    aegis:indexCursor "2026-10-08T00:00:00Z|http://aegis.gastown.local/ontology/mem/finding/rdf-store/benchmark/20261008T000000Z" .
+
+<http://aegis.gastown.local/ontology/mem/person/dbox/20261009T000000Z>
+    a aegis:Person ;
+    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/person/dbox> ;
+    rdfs:label "Dana Box, working group advisor" ;
+    rdfs:comment "Advisor for the memory working group; curious about RDF projections" ;
+    aegis:sourceKind "crew:declared" ;
+    aegis:recordedAt "2026-10-09T00:00:00Z" ;
+    aegis:indexCursor "2026-10-09T00:00:00Z|http://aegis.gastown.local/ontology/mem/person/dbox/20261009T000000Z" .

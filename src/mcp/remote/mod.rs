@@ -272,12 +272,15 @@ impl RemoteBackend {
         req: &FeedbackSubmitRequest,
         agent: &str,
     ) -> Result<CallToolResult, McpError> {
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "injection_id": req.injection_id,
             "rating": req.rating,
             "reason": req.reason.clone().unwrap_or_default(),
             "agent": agent,
         });
+        if let Some(item) = &req.item {
+            body["item"] = serde_json::Value::String(item.clone());
+        }
         self.post("feedback_submit", "/feedback", body).await
     }
 

@@ -1,0 +1,11 @@
+[
+  {"prompt": "what rate limit did we pick for the widget service?", "expect_key": "mem/decision/widget-service/rate-limit", "expect_body": "250", "never_body": "Chose 100 requests per minute over 50"},
+  {"prompt": "when is the deploy window for disruptive changes", "expect_key": "mem/directive/crew/deploy-window"},
+  {"prompt": "how should the email sign-off look for alex", "expect_key": "mem/preference/alex/email/sign-off"},
+  {"prompt": "typing is rejected by vimium in chrome tools again", "expect_key": "mem/lesson/chrome-tools/vimium"},
+  {"prompt": "how do I reach the grafana metrics api", "expect_key": "mem/reference/grafana/metrics-api"},
+  {"prompt": "pick up the handoff for fixture-agent please", "expect_key": "mem/handoff/fixture-agent"},
+  {"prompt": "media server indexer timeouts are back", "expect_key": "mem/incident/media-server/20261007T0300Z"},
+  {"prompt": "what did the rdf store benchmark show on latency", "expect_key": "mem/finding/rdf-store/benchmark"},
+  {"prompt": "who is dbox on the working group", "expect_key": "mem/person/dbox"}
+]

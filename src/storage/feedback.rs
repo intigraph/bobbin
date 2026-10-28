@@ -22,6 +22,10 @@ pub struct FeedbackInput {
     pub rating: String,
     #[serde(default)]
     pub reason: String,
+    /// Per-item citation inside the injection: `m1`..`m5` for the memory
+    /// items bobbin tagged (aegis-gshu.2). Omit to rate the whole injection.
+    #[serde(default)]
+    pub item: Option<String>,
 }
 
 /// A stored feedback record.
@@ -33,6 +37,28 @@ pub struct FeedbackRecord {
     pub agent: String,
     pub rating: String,
     pub reason: String,
+    /// Cited item (`m1`..`m5`) when the rating is for one memory item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item: Option<String>,
+    /// The entity IRI that item resolved to when the injection was logged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iri: Option<String>,
+}
+
+/// Usage of one cited memory entity across feedback (aegis-gshu.2).
+#[derive(Debug, Serialize)]
+pub struct EntityUsage {
+    pub iri: String,
+    pub kind: String,
+    /// Times the entity was injected as a cited memory item.
+    pub injected: u64,
+    pub used: u64,
+    pub useful: u64,
+    pub noise: u64,
+    pub harmful: u64,
+    /// Last `used` rating, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_used: Option<String>,
 }
 
 /// Query parameters for listing feedback.
@@ -52,6 +78,15 @@ pub struct FeedbackStats {
     pub useful: u64,
     pub noise: u64,
     pub harmful: u64,
+    /// Ratings that say a cited memory item was used (aegis-gshu.2).
+    #[serde(default)]
+    pub used: u64,
+    /// Feedback records that name a cited item (`m1`..`m5`).
+    #[serde(default)]
+    pub item_feedback: u64,
+    /// Most-injected cited memory entities with their ratings (top 20).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub memory_entities: Vec<EntityUsage>,
     /// Feedback records that have at least one lineage action.
     #[serde(default)]
     pub actioned: u64,
@@ -136,10 +171,23 @@ pub struct InjectionDetail {
     pub grounding_id: Option<String>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub formatted_output: String,
+    /// Cited memory items (`m1`..`m5`) and the entities they resolved to.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub memory_items: Vec<crate::memory_recall::CitedItem>,
     pub feedback: Vec<FeedbackRecord>,
 }
 
-const VALID_RATINGS: &[&str] = &["useful", "noise", "harmful"];
+/// `used` is per cited item: the agent acted on that memory item.
+pub const VALID_RATINGS: &[&str] = &["useful", "noise", "harmful", "used"];
+
+/// `m1`..`m99`: the per-injection item ids bobbin prints for memory items.
+#[must_use]
+pub fn is_valid_item(item: &str) -> bool {
+    let Some(n) = item.strip_prefix('m') else {
+        return false;
+    };
+    !n.is_empty() && n.len() <= 2 && !n.starts_with('0') && n.bytes().all(|b| b.is_ascii_digit())
+}
 
 impl FeedbackStore {
     /// Open or create a feedback store at the given path.
@@ -240,6 +288,41 @@ impl FeedbackStore {
                 self.conn.execute_batch(ddl)?;
             }
         }
+
+        // Per-item citations (aegis-gshu.2): what each `m<n>` in an injection
+        // resolved to, so a rating on (injection_id, item) lands on an entity.
+        self.conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS injection_items (
+                injection_id TEXT NOT NULL,
+                item TEXT NOT NULL,
+                iri TEXT NOT NULL,
+                kind TEXT,
+                natural_key TEXT,
+                line TEXT,
+                PRIMARY KEY (injection_id, item)
+            );
+            CREATE INDEX IF NOT EXISTS idx_injection_items_iri ON injection_items(iri);
+        "#,
+        )?;
+        for (col, ddl) in [
+            ("item", "ALTER TABLE feedback ADD COLUMN item TEXT;"),
+            ("iri", "ALTER TABLE feedback ADD COLUMN iri TEXT;"),
+        ] {
+            let has_col: bool = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('feedback') WHERE name = ?1",
+                    [col],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            if !has_col {
+                self.conn.execute_batch(ddl)?;
+            }
+        }
+        self.conn
+            .execute_batch("CREATE INDEX IF NOT EXISTS idx_feedback_iri ON feedback(iri);")?;
 
         // Index for bundle/bead grouping queries
         self.conn.execute_batch(
@@ -358,6 +441,54 @@ impl FeedbackStore {
         Ok(())
     }
 
+    /// Log the cited memory items of an injection (`m1`..`m5` -> entity IRI).
+    pub fn store_injection_items(
+        &self,
+        injection_id: &str,
+        items: &[crate::memory_recall::CitedItem],
+    ) -> Result<()> {
+        if injection_id.is_empty() {
+            anyhow::bail!("injection_id is required");
+        }
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.fZ")
+            .to_string();
+        self.conn.execute(
+            "INSERT OR IGNORE INTO injections (injection_id, timestamp) VALUES (?1, ?2)",
+            rusqlite::params![injection_id, now],
+        )?;
+        for it in items {
+            if !is_valid_item(&it.item) {
+                anyhow::bail!("invalid item id '{}' (expected m1..m5)", it.item);
+            }
+            self.conn.execute(
+                "INSERT OR REPLACE INTO injection_items (injection_id, item, iri, kind, natural_key, line) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![injection_id, it.item, it.iri, it.kind, it.natural_key, it.line],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Cited items logged for an injection, in item order.
+    pub fn injection_items(
+        &self,
+        injection_id: &str,
+    ) -> Result<Vec<crate::memory_recall::CitedItem>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT item, iri, COALESCE(kind, ''), COALESCE(natural_key, ''), COALESCE(line, '') FROM injection_items WHERE injection_id = ?1 ORDER BY CAST(SUBSTR(item, 2) AS INTEGER)",
+        )?;
+        let rows = stmt.query_map([injection_id], |row| {
+            Ok(crate::memory_recall::CitedItem {
+                item: row.get(0)?,
+                iri: row.get(1)?,
+                kind: row.get(2)?,
+                natural_key: row.get(3)?,
+                line: row.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
     /// Store feedback for an injection.
     pub fn store_feedback(&self, input: &FeedbackInput) -> Result<i64> {
         if !VALID_RATINGS.contains(&input.rating.as_str()) {
@@ -369,6 +500,19 @@ impl FeedbackStore {
         }
         if input.injection_id.is_empty() {
             anyhow::bail!("injection_id is required");
+        }
+        let item = input
+            .item
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        if let Some(item) = item {
+            if !is_valid_item(item) {
+                anyhow::bail!("Invalid item '{item}': expected a cited item id like m1..m5");
+            }
+        }
+        if input.rating == "used" && item.is_none() {
+            anyhow::bail!("Invalid rating 'used' without item: 'used' rates one cited memory item (item = m1..m5)");
         }
 
         // Explicitly set timestamp — older DB schemas may lack DEFAULT clauses.
@@ -383,9 +527,23 @@ impl FeedbackStore {
             rusqlite::params![input.injection_id, now],
         )?;
 
+        // Resolve (injection_id, item) to the entity it cited. An item the
+        // injection never logged is kept (the rating still counts) with no IRI.
+        let iri: Option<String> = match item {
+            Some(item) => self
+                .conn
+                .query_row(
+                    "SELECT iri FROM injection_items WHERE injection_id = ?1 AND item = ?2",
+                    rusqlite::params![input.injection_id, item],
+                    |row| row.get(0),
+                )
+                .ok(),
+            None => None,
+        };
+
         self.conn.execute(
-            "INSERT INTO feedback (injection_id, timestamp, agent, rating, reason) VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![input.injection_id, now, input.agent, input.rating, input.reason],
+            "INSERT INTO feedback (injection_id, timestamp, agent, rating, reason, item, iri) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![input.injection_id, now, input.agent, input.rating, input.reason, item, iri],
         )?;
 
         Ok(self.conn.last_insert_rowid())
@@ -395,7 +553,7 @@ impl FeedbackStore {
     pub fn list_feedback(&self, query: &FeedbackQuery) -> Result<Vec<FeedbackRecord>> {
         let limit = query.limit.unwrap_or(20).min(50);
         let mut sql = String::from(
-            "SELECT id, injection_id, timestamp, agent, rating, reason FROM feedback WHERE 1=1",
+            "SELECT id, injection_id, timestamp, agent, rating, reason, item, iri FROM feedback WHERE 1=1",
         );
         let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
@@ -429,6 +587,8 @@ impl FeedbackStore {
                 agent: row.get(3)?,
                 rating: row.get(4)?,
                 reason: row.get(5)?,
+                item: row.get(6)?,
+                iri: row.get(7)?,
             })
         })?;
 
@@ -488,16 +648,64 @@ impl FeedbackStore {
             .unwrap_or(0) as u64;
         let unactioned = total_feedback.saturating_sub(actioned);
 
+        let used: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM feedback WHERE rating = 'used'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )? as u64;
+        let item_feedback: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM feedback WHERE item IS NOT NULL",
+            [],
+            |row| row.get::<_, i64>(0),
+        )? as u64;
+        let memory_entities = self.entity_usage(20)?;
+
         Ok(FeedbackStats {
             total_injections,
             total_feedback,
             useful,
             noise,
             harmful,
+            used,
+            item_feedback,
+            memory_entities,
             actioned,
             unactioned,
             lineage_records,
         })
+    }
+
+    /// Per-entity usage of cited memory items, most injected first.
+    pub fn entity_usage(&self, limit: usize) -> Result<Vec<EntityUsage>> {
+        let mut stmt = self.conn.prepare(
+            r#"SELECT ii.iri,
+                      COALESCE(MAX(ii.kind), ''),
+                      COUNT(DISTINCT ii.injection_id || '/' || ii.item),
+                      COUNT(DISTINCT CASE WHEN f.rating = 'used' THEN f.id END),
+                      COUNT(DISTINCT CASE WHEN f.rating = 'useful' THEN f.id END),
+                      COUNT(DISTINCT CASE WHEN f.rating = 'noise' THEN f.id END),
+                      COUNT(DISTINCT CASE WHEN f.rating = 'harmful' THEN f.id END),
+                      MAX(CASE WHEN f.rating = 'used' THEN f.timestamp END)
+               FROM injection_items ii
+               LEFT JOIN feedback f
+                 ON f.injection_id = ii.injection_id AND f.item = ii.item
+               GROUP BY ii.iri
+               ORDER BY 3 DESC, 4 DESC, ii.iri
+               LIMIT ?1"#,
+        )?;
+        let rows = stmt.query_map([limit as i64], |row| {
+            Ok(EntityUsage {
+                iri: row.get(0)?,
+                kind: row.get(1)?,
+                injected: row.get::<_, i64>(2)? as u64,
+                used: row.get::<_, i64>(3)? as u64,
+                useful: row.get::<_, i64>(4)? as u64,
+                noise: row.get::<_, i64>(5)? as u64,
+                harmful: row.get::<_, i64>(6)? as u64,
+                last_used: row.get(7)?,
+            })
+        })?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
     /// Get feedback statistics grouped by bundle name.
@@ -733,6 +941,7 @@ impl FeedbackStore {
             scope: row.get(9)?,
             faction_id: row.get(10)?,
             grounding_id: row.get(11)?,
+            memory_items: self.injection_items(injection_id).unwrap_or_default(),
             feedback,
         }))
     }
@@ -874,738 +1083,5 @@ impl FeedbackStore {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::NamedTempFile;
-
-    fn temp_store() -> (FeedbackStore, NamedTempFile) {
-        let f = NamedTempFile::new().unwrap();
-        let store = FeedbackStore::open(f.path()).unwrap();
-        (store, f)
-    }
-
-    #[test]
-    fn test_store_and_list_feedback() {
-        let (store, _f) = temp_store();
-        let input = FeedbackInput {
-            injection_id: "inj-abc123".to_string(),
-            agent: "aegis/crew/test".to_string(),
-            rating: "useful".to_string(),
-            reason: "helped find the right file".to_string(),
-        };
-        let id = store.store_feedback(&input).unwrap();
-        assert!(id > 0);
-
-        let records = store.list_feedback(&FeedbackQuery::default()).unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].injection_id, "inj-abc123");
-        assert_eq!(records[0].rating, "useful");
-    }
-
-    #[test]
-    fn test_invalid_rating() {
-        let (store, _f) = temp_store();
-        let input = FeedbackInput {
-            injection_id: "inj-abc123".to_string(),
-            agent: "test".to_string(),
-            rating: "bad".to_string(),
-            reason: String::new(),
-        };
-        assert!(store.store_feedback(&input).is_err());
-    }
-
-    #[test]
-    fn test_stats() {
-        let (store, _f) = temp_store();
-        for (inj, rating) in [
-            ("inj-1", "useful"),
-            ("inj-1", "noise"),
-            ("inj-2", "harmful"),
-        ] {
-            store
-                .store_feedback(&FeedbackInput {
-                    injection_id: inj.to_string(),
-                    agent: "test".to_string(),
-                    rating: rating.to_string(),
-                    reason: String::new(),
-                })
-                .unwrap();
-        }
-        let stats = store.stats().unwrap();
-        assert_eq!(stats.total_injections, 2);
-        assert_eq!(stats.total_feedback, 3);
-        assert_eq!(stats.useful, 1);
-        assert_eq!(stats.noise, 1);
-        assert_eq!(stats.harmful, 1);
-    }
-
-    #[test]
-    fn test_filter_by_rating() {
-        let (store, _f) = temp_store();
-        for rating in ["useful", "noise", "useful"] {
-            store
-                .store_feedback(&FeedbackInput {
-                    injection_id: "inj-1".to_string(),
-                    agent: "test".to_string(),
-                    rating: rating.to_string(),
-                    reason: String::new(),
-                })
-                .unwrap();
-        }
-        let q = FeedbackQuery {
-            rating: Some("useful".to_string()),
-            ..Default::default()
-        };
-        let records = store.list_feedback(&q).unwrap();
-        assert_eq!(records.len(), 2);
-    }
-
-    #[test]
-    fn test_react_injection_id() {
-        let (store, _f) = temp_store();
-        let input = FeedbackInput {
-            injection_id: "inj-react-abc123".to_string(),
-            agent: "test".to_string(),
-            rating: "useful".to_string(),
-            reason: "reaction context was helpful".to_string(),
-        };
-        store.store_feedback(&input).unwrap();
-        let records = store
-            .list_feedback(&FeedbackQuery {
-                injection_id: Some("inj-react-abc123".to_string()),
-                ..Default::default()
-            })
-            .unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].injection_id, "inj-react-abc123");
-    }
-
-    #[test]
-    fn test_store_injection() {
-        let (store, _f) = temp_store();
-        let files = vec!["src/main.rs".to_string(), "src/lib.rs".to_string()];
-        store
-            .store_injection(
-                "inj-test1234",
-                Some("session-abc"),
-                Some("aegis/crew/test"),
-                "how does auth work?",
-                &files,
-                5,
-                300,
-            )
-            .unwrap();
-
-        // Verify injection was stored
-        let stats = store.stats().unwrap();
-        assert_eq!(stats.total_injections, 1);
-
-        // Feedback referencing this injection should work
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-test1234".to_string(),
-                agent: "test".to_string(),
-                rating: "useful".to_string(),
-                reason: "found the auth module".to_string(),
-            })
-            .unwrap();
-        let stats = store.stats().unwrap();
-        assert_eq!(stats.total_feedback, 1);
-    }
-
-    #[test]
-    fn test_get_injection_detail() {
-        let (store, _f) = temp_store();
-        let files = vec!["src/main.rs".to_string(), "src/lib.rs".to_string()];
-        store
-            .store_injection(
-                "inj-detail",
-                Some("sess-1"),
-                Some("aegis/crew/ian"),
-                "how does auth work?",
-                &files,
-                5,
-                300,
-            )
-            .unwrap();
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-detail".to_string(),
-                agent: "aegis/crew/ellie".to_string(),
-                rating: "useful".to_string(),
-                reason: "great context".to_string(),
-            })
-            .unwrap();
-
-        let detail = store.get_injection("inj-detail").unwrap().unwrap();
-        assert_eq!(detail.injection_id, "inj-detail");
-        assert_eq!(detail.query.as_deref(), Some("how does auth work?"));
-        assert_eq!(detail.files.len(), 2);
-        assert_eq!(detail.total_chunks, 5);
-        assert_eq!(detail.budget_lines, 300);
-        assert_eq!(detail.feedback.len(), 1);
-        assert_eq!(detail.feedback[0].rating, "useful");
-
-        // Non-existent injection returns None
-        assert!(store.get_injection("inj-nope").unwrap().is_none());
-    }
-
-    #[test]
-    fn test_lineage_store_and_list() {
-        let (store, _f) = temp_store();
-        // Create feedback records first
-        let fid1 = store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-1".to_string(),
-                agent: "test".to_string(),
-                rating: "noise".to_string(),
-                reason: "init function noise".to_string(),
-            })
-            .unwrap();
-        let fid2 = store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-2".to_string(),
-                agent: "test".to_string(),
-                rating: "noise".to_string(),
-                reason: "init function noise".to_string(),
-            })
-            .unwrap();
-
-        // Record lineage action
-        let lid = store
-            .store_lineage(&LineageInput {
-                feedback_ids: vec![fid1, fid2],
-                action_type: "tag_effect".to_string(),
-                bead: Some("bo-a94q".to_string()),
-                commit_hash: Some("4ded620".to_string()),
-                description: "Deployed auto:init exclude".to_string(),
-                agent: Some("aegis/crew/ian".to_string()),
-            })
-            .unwrap();
-        assert!(lid > 0);
-
-        // List all lineage
-        let records = store.list_lineage(&LineageQuery::default()).unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].action_type, "tag_effect");
-        assert_eq!(records[0].bead.as_deref(), Some("bo-a94q"));
-        assert_eq!(records[0].feedback_ids, vec![fid1, fid2]);
-
-        // Query by bead
-        let records = store
-            .list_lineage(&LineageQuery {
-                bead: Some("bo-a94q".to_string()),
-                ..Default::default()
-            })
-            .unwrap();
-        assert_eq!(records.len(), 1);
-
-        // Query by feedback_id
-        let records = store
-            .list_lineage(&LineageQuery {
-                feedback_id: Some(fid1),
-                ..Default::default()
-            })
-            .unwrap();
-        assert_eq!(records.len(), 1);
-    }
-
-    #[test]
-    fn test_lineage_stats() {
-        let (store, _f) = temp_store();
-        let fid1 = store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-1".to_string(),
-                agent: "test".to_string(),
-                rating: "noise".to_string(),
-                reason: "noise".to_string(),
-            })
-            .unwrap();
-        let _fid2 = store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-2".to_string(),
-                agent: "test".to_string(),
-                rating: "noise".to_string(),
-                reason: "noise".to_string(),
-            })
-            .unwrap();
-
-        // Before lineage: 0 actioned, 2 unactioned
-        let stats = store.stats().unwrap();
-        assert_eq!(stats.actioned, 0);
-        assert_eq!(stats.unactioned, 2);
-        assert_eq!(stats.lineage_records, 0);
-
-        // Record lineage for fid1 only
-        store
-            .store_lineage(&LineageInput {
-                feedback_ids: vec![fid1],
-                action_type: "code_fix".to_string(),
-                bead: None,
-                commit_hash: Some("abc123".to_string()),
-                description: "Fixed it".to_string(),
-                agent: None,
-            })
-            .unwrap();
-
-        let stats = store.stats().unwrap();
-        assert_eq!(stats.actioned, 1);
-        assert_eq!(stats.unactioned, 1);
-        assert_eq!(stats.lineage_records, 1);
-    }
-
-    #[test]
-    fn test_lineage_invalid_action_type() {
-        let (store, _f) = temp_store();
-        let fid = store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-1".to_string(),
-                agent: "test".to_string(),
-                rating: "noise".to_string(),
-                reason: "test".to_string(),
-            })
-            .unwrap();
-        let result = store.store_lineage(&LineageInput {
-            feedback_ids: vec![fid],
-            action_type: "invalid".to_string(),
-            bead: None,
-            commit_hash: None,
-            description: "test".to_string(),
-            agent: None,
-        });
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_lineage_rejects_nonexistent_feedback_ids() {
-        let (store, _f) = temp_store();
-        let fid = store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-1".to_string(),
-                agent: "test".to_string(),
-                rating: "noise".to_string(),
-                reason: "test".to_string(),
-            })
-            .unwrap();
-
-        // Mix of valid and invalid feedback IDs should be rejected
-        let result = store.store_lineage(&LineageInput {
-            feedback_ids: vec![fid, 9999],
-            action_type: "code_fix".to_string(),
-            bead: None,
-            commit_hash: None,
-            description: "test".to_string(),
-            agent: None,
-        });
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
-        assert!(
-            err_msg.contains("9999"),
-            "Error should mention the missing ID: {}",
-            err_msg
-        );
-
-        // Verify no lineage record was created (transaction-like behavior)
-        let records = store.list_lineage(&LineageQuery::default()).unwrap();
-        assert_eq!(
-            records.len(),
-            0,
-            "No lineage should be created when feedback IDs are invalid"
-        );
-    }
-
-    #[test]
-    fn test_file_feedback_scores_basic() {
-        let (store, _f) = temp_store();
-
-        // Create an injection with files and query
-        store
-            .store_injection_with_output(
-                "inj-score1",
-                None,
-                Some("agent-a"),
-                "authentication login handler",
-                &["src/auth.rs".to_string(), "src/session.rs".to_string()],
-                2,
-                100,
-                None,
-            )
-            .unwrap();
-
-        // Rate it useful
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-score1".to_string(),
-                agent: "agent-b".to_string(),
-                rating: "useful".to_string(),
-                reason: String::new(),
-            })
-            .unwrap();
-
-        // Query with overlapping keywords
-        let scores = store
-            .file_feedback_scores("authentication middleware handler", 0.1)
-            .unwrap();
-        assert!(!scores.is_empty(), "Should have scores for similar query");
-        assert!(
-            scores.get("src/auth.rs").copied().unwrap_or(0.0) > 0.0,
-            "auth.rs should be boosted"
-        );
-        assert!(
-            scores.get("src/session.rs").copied().unwrap_or(0.0) > 0.0,
-            "session.rs should be boosted"
-        );
-    }
-
-    #[test]
-    fn test_file_feedback_scores_harmful_penalty() {
-        let (store, _f) = temp_store();
-
-        store
-            .store_injection_with_output(
-                "inj-harm1",
-                None,
-                Some("agent-a"),
-                "database connection pooling",
-                &["src/db.rs".to_string()],
-                1,
-                100,
-                None,
-            )
-            .unwrap();
-
-        // Rate it harmful
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-harm1".to_string(),
-                agent: "agent-c".to_string(),
-                rating: "harmful".to_string(),
-                reason: "wrong file".to_string(),
-            })
-            .unwrap();
-
-        let scores = store
-            .file_feedback_scores("database connection pooling", 0.1)
-            .unwrap();
-        assert!(
-            scores.get("src/db.rs").copied().unwrap_or(0.0) < 0.0,
-            "db.rs should have negative score from harmful rating"
-        );
-    }
-
-    #[test]
-    fn test_file_feedback_scores_no_overlap() {
-        let (store, _f) = temp_store();
-
-        store
-            .store_injection_with_output(
-                "inj-nooverlap",
-                None,
-                Some("agent-a"),
-                "authentication login handler",
-                &["src/auth.rs".to_string()],
-                1,
-                100,
-                None,
-            )
-            .unwrap();
-
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-nooverlap".to_string(),
-                agent: "agent-b".to_string(),
-                rating: "useful".to_string(),
-                reason: String::new(),
-            })
-            .unwrap();
-
-        // Query with completely different keywords — should have no overlap
-        let scores = store
-            .file_feedback_scores("database migration schema", 0.1)
-            .unwrap();
-        assert!(
-            scores.is_empty(),
-            "Should have no scores for unrelated query"
-        );
-    }
-
-    #[test]
-    fn test_file_feedback_scores_cross_agent() {
-        let (store, _f) = temp_store();
-
-        // Two different agents rate the same injection
-        store
-            .store_injection_with_output(
-                "inj-cross1",
-                None,
-                Some("agent-a"),
-                "error handling retry logic",
-                &["src/retry.rs".to_string()],
-                1,
-                100,
-                None,
-            )
-            .unwrap();
-
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-cross1".to_string(),
-                agent: "agent-b".to_string(),
-                rating: "useful".to_string(),
-                reason: String::new(),
-            })
-            .unwrap();
-
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-cross1".to_string(),
-                agent: "agent-c".to_string(),
-                rating: "useful".to_string(),
-                reason: String::new(),
-            })
-            .unwrap();
-
-        let scores = store
-            .file_feedback_scores("error handling retry mechanism", 0.1)
-            .unwrap();
-        let retry_score = scores.get("src/retry.rs").copied().unwrap_or(0.0);
-        assert!(
-            retry_score > 0.5,
-            "retry.rs should have high score from 2 useful ratings, got {}",
-            retry_score
-        );
-    }
-
-    #[test]
-    fn test_stats_by_bundle() {
-        let (store, _f) = temp_store();
-        let files = vec!["src/main.rs".to_string()];
-
-        // Create injections with bundle_name metadata
-        store
-            .store_injection_full(
-                "inj-b1",
-                None,
-                None,
-                "auth query",
-                &files,
-                3,
-                100,
-                None,
-                Some("auth"),
-                None,
-            )
-            .unwrap();
-        store
-            .store_injection_full(
-                "inj-b2",
-                None,
-                None,
-                "auth login",
-                &files,
-                2,
-                100,
-                None,
-                Some("auth"),
-                None,
-            )
-            .unwrap();
-        store
-            .store_injection_full(
-                "inj-b3",
-                None,
-                None,
-                "search query",
-                &files,
-                4,
-                200,
-                None,
-                Some("search"),
-                None,
-            )
-            .unwrap();
-        store
-            .store_injection_full(
-                "inj-b4",
-                None,
-                None,
-                "no bundle",
-                &files,
-                1,
-                50,
-                None,
-                None,
-                None,
-            )
-            .unwrap();
-
-        // Add feedback
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-b1".into(),
-                agent: "test".into(),
-                rating: "useful".into(),
-                reason: String::new(),
-            })
-            .unwrap();
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-b2".into(),
-                agent: "test".into(),
-                rating: "noise".into(),
-                reason: String::new(),
-            })
-            .unwrap();
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-b3".into(),
-                agent: "test".into(),
-                rating: "useful".into(),
-                reason: String::new(),
-            })
-            .unwrap();
-
-        let by_bundle = store.stats_by_bundle().unwrap();
-        assert!(
-            by_bundle.len() >= 2,
-            "should have at least auth and search groups"
-        );
-
-        let auth = by_bundle.iter().find(|e| e.key == "auth").unwrap();
-        assert_eq!(auth.injections, 2);
-        assert_eq!(auth.feedback, 2);
-        assert_eq!(auth.useful, 1);
-        assert_eq!(auth.noise, 1);
-
-        let search = by_bundle.iter().find(|e| e.key == "search").unwrap();
-        assert_eq!(search.injections, 1);
-        assert_eq!(search.useful, 1);
-    }
-
-    #[test]
-    fn test_stats_by_bead() {
-        let (store, _f) = temp_store();
-        let files = vec!["src/main.rs".to_string()];
-
-        store
-            .store_injection_full(
-                "inj-d1",
-                None,
-                None,
-                "q1",
-                &files,
-                1,
-                100,
-                None,
-                None,
-                Some("aegis-abc"),
-            )
-            .unwrap();
-        store
-            .store_injection_full(
-                "inj-d2",
-                None,
-                None,
-                "q2",
-                &files,
-                1,
-                100,
-                None,
-                None,
-                Some("aegis-abc"),
-            )
-            .unwrap();
-        store
-            .store_injection_full(
-                "inj-d3",
-                None,
-                None,
-                "q3",
-                &files,
-                1,
-                100,
-                None,
-                None,
-                Some("aegis-xyz"),
-            )
-            .unwrap();
-
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-d1".into(),
-                agent: "test".into(),
-                rating: "useful".into(),
-                reason: String::new(),
-            })
-            .unwrap();
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-d3".into(),
-                agent: "test".into(),
-                rating: "harmful".into(),
-                reason: String::new(),
-            })
-            .unwrap();
-
-        let by_bead = store.stats_by_bead().unwrap();
-        let abc = by_bead.iter().find(|e| e.key == "aegis-abc").unwrap();
-        assert_eq!(abc.injections, 2);
-        assert_eq!(abc.feedback, 1);
-        assert_eq!(abc.useful, 1);
-
-        let xyz = by_bead.iter().find(|e| e.key == "aegis-xyz").unwrap();
-        assert_eq!(xyz.injections, 1);
-        assert_eq!(xyz.harmful, 1);
-    }
-
-    #[test]
-    fn scoped_na_injection_persists_scope_for_feedback_join() {
-        let (store, _f) = temp_store();
-        store
-            .store_scoped_injection_with_output(
-                "inj-na",
-                Some("session"),
-                None,
-                "turn grounding",
-                &[],
-                1,
-                8,
-                Some("grounded"),
-                Some("na"),
-                Some("gaia"),
-                Some("sha256:abc"),
-            )
-            .unwrap();
-        store
-            .store_feedback(&FeedbackInput {
-                injection_id: "inj-na".into(),
-                agent: "agent".into(),
-                rating: "useful".into(),
-                reason: "matched the turn".into(),
-            })
-            .unwrap();
-        let detail = store.get_injection("inj-na").unwrap().unwrap();
-        assert_eq!(detail.scope.as_deref(), Some("na"));
-        assert_eq!(detail.faction_id.as_deref(), Some("gaia"));
-        assert_eq!(detail.feedback.len(), 1);
-    }
-
-    #[test]
-    fn unscoped_na_injection_is_rejected() {
-        let (store, _f) = temp_store();
-        let result = store.store_scoped_injection_with_output(
-            "inj-na",
-            None,
-            None,
-            "turn grounding",
-            &[],
-            1,
-            8,
-            None,
-            Some("na"),
-            None,
-            Some("sha256:abc"),
-        );
-        assert!(result.is_err());
-    }
-}
+#[path = "feedback_tests.rs"]
+mod tests;

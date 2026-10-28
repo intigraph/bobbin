@@ -264,7 +264,7 @@ pub fn human_age(secs: u64) -> String {
     }
 }
 
-pub use cache::{load_tripwires, TRIPWIRE_QUERY};
+pub use cache::{endpoint, load_tripwires, TRIPWIRE_QUERY};
 
 /// Prepend the governed-boundary section to an already-formatted context block.
 ///

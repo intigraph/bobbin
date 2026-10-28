@@ -368,45 +368,9 @@ pub struct PrimeLanguageStats {
 }
 
 mod beads;
+mod feedback;
 pub use beads::{BeadResultItem, SearchBeadsResponse};
-
-/// A feedback record from the server
-#[derive(Debug, Deserialize, serde::Serialize)]
-pub struct FeedbackRecord {
-    pub id: i64,
-    pub injection_id: String,
-    pub timestamp: String,
-    pub agent: String,
-    pub rating: String,
-    pub reason: String,
-}
-
-/// Aggregated feedback statistics from the server
-#[derive(Debug, Deserialize, serde::Serialize)]
-pub struct FeedbackStats {
-    pub total_injections: u64,
-    pub total_feedback: u64,
-    pub useful: u64,
-    pub noise: u64,
-    pub harmful: u64,
-    #[serde(default)]
-    pub actioned: u64,
-    #[serde(default)]
-    pub unactioned: u64,
-    #[serde(default)]
-    pub lineage_records: u64,
-}
-
-/// Feedback statistics grouped by bundle or bead
-#[derive(Debug, Deserialize, serde::Serialize)]
-pub struct GroupedStatsEntry {
-    pub key: String,
-    pub injections: u64,
-    pub feedback: u64,
-    pub useful: u64,
-    pub noise: u64,
-    pub harmful: u64,
-}
+pub use feedback::{FeedbackRecord, FeedbackStats, GroupedStatsEntry};
 
 /// A lineage record from the server
 #[derive(Debug, Deserialize, serde::Serialize)]
@@ -949,17 +913,18 @@ impl Client {
         rating: &str,
         reason: &str,
         agent: &str,
+        item: Option<&str>,
     ) -> Result<serde_json::Value> {
-        self.post_value(
-            "/feedback",
-            &serde_json::json!({
-                "injection_id": injection_id,
-                "rating": rating,
-                "reason": reason,
-                "agent": agent,
-            }),
-        )
-        .await
+        let mut body = serde_json::json!({
+            "injection_id": injection_id,
+            "rating": rating,
+            "reason": reason,
+            "agent": agent,
+        });
+        if let Some(item) = item {
+            body["item"] = serde_json::Value::String(item.to_string());
+        }
+        self.post_value("/feedback", &body).await
     }
 
     /// List feedback records via the remote server.

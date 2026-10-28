@@ -83,6 +83,10 @@ pub(super) fn router(state: Arc<AppState>) -> axum::Router {
         .route("/webhook/push", post(webhook::webhook_push))
         .route("/injections", post(feedback::injection_store))
         .route("/injections/{id}", get(feedback::injection_detail))
+        .route(
+            "/injections/{id}/items",
+            post(feedback::injection_items_store),
+        )
         .route("/feedback", post(feedback::feedback_submit))
         .route("/feedback", get(feedback::feedback_list))
         .route("/feedback/stats", get(feedback::feedback_stats))

@@ -2513,7 +2513,7 @@ impl BobbinMcpServer {
 
     /// Submit feedback on a bobbin context injection
     #[tool(
-        description = "Submit feedback on a bobbin context injection. Rate injections as 'useful' (helped with task), 'noise' (irrelevant to current work), or 'harmful' (actively misleading). Reference the injection_id shown in [injection_id: inj-xxx] from the context injection output. Supports both standard (inj-xxx) and reaction (inj-react-xxx) injection IDs.",
+        description = "Submit feedback on a bobbin context injection. Rate injections as 'useful' (helped with task), 'noise' (irrelevant to current work), or 'harmful' (actively misleading). Reference the injection_id shown in [injection_id: inj-xxx] from the context injection output. Supports both standard (inj-xxx) and reaction (inj-react-xxx) injection IDs. To rate one cited memory item, pass item (m1..m5 from the '[m<n>]' lines); rating 'used' means you acted on that item.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -2532,13 +2532,21 @@ impl BobbinMcpServer {
             )]));
         }
 
-        let valid_ratings = ["useful", "noise", "harmful"];
+        let valid_ratings = crate::storage::feedback::VALID_RATINGS;
         if !valid_ratings.contains(&req.rating.as_str()) {
             return Ok(CallToolResult::success(vec![Content::text(format!(
                 "Error: rating must be one of: {}",
                 valid_ratings.join(", ")
             ))]));
         }
+        let item = match super::feedback_text::check_item(&req.rating, req.item.as_deref()) {
+            Ok(item) => item,
+            Err(msg) => {
+                return Ok(CallToolResult::success(vec![Content::text(format!(
+                    "Error: {msg}"
+                ))]))
+            }
+        };
 
         let agent = req.agent.unwrap_or_else(|| {
             std::env::var("GT_ROLE")
@@ -2559,6 +2567,7 @@ impl BobbinMcpServer {
                 rating: req.rating.clone(),
                 agent: Some(agent.clone()),
                 reason: Some(reason.clone()),
+                item: item.clone(),
             };
             return remote.feedback_submit(&forwarded, &agent).await;
         }
@@ -2568,6 +2577,7 @@ impl BobbinMcpServer {
             agent,
             rating: req.rating.clone(),
             reason,
+            item: item.clone(),
         };
 
         let store = self
@@ -2580,7 +2590,8 @@ impl BobbinMcpServer {
 
         Ok(CallToolResult::success(vec![Content::text(format!(
             "Feedback recorded: {} for {}",
-            req.rating, injection_id
+            req.rating,
+            super::feedback_text::target(&injection_id, item.as_deref())
         ))]))
     }
 
@@ -2630,7 +2641,8 @@ impl BobbinMcpServer {
             } else {
                 &r.timestamp
             };
-            let mut line = format!("[{}] {} | {} | {}", r.injection_id, ts, r.rating, r.agent);
+            let id = super::feedback_text::target(&r.injection_id, r.item.as_deref());
+            let mut line = format!("[{}] {} | {} | {}", id, ts, r.rating, r.agent);
             if !r.reason.is_empty() {
                 let truncated: String = r.reason.chars().take(100).collect();
                 line.push_str(&format!(" | {}", truncated));
@@ -2705,33 +2717,7 @@ impl BobbinMcpServer {
                     .stats()
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
-                let rate = if stats.total_injections > 0 {
-                    format!(
-                        "{:.0}%",
-                        stats.total_feedback as f64 / stats.total_injections as f64 * 100.0
-                    )
-                } else {
-                    "N/A".to_string()
-                };
-
-                let text = format!(
-                    "Injections: {}\nFeedback: {} ({} coverage)\n  useful: {}\n  noise: {}\n  harmful: {}",
-                    stats.total_injections,
-                    stats.total_feedback,
-                    rate,
-                    stats.useful,
-                    stats.noise,
-                    stats.harmful
-                );
-
-                if stats.lineage_records > 0 || stats.actioned > 0 {
-                    let text = format!(
-                        "{}\nLineage: {} records\n  actioned: {}\n  unactioned: {}",
-                        text, stats.lineage_records, stats.actioned, stats.unactioned
-                    );
-                    return Ok(CallToolResult::success(vec![Content::text(text)]));
-                }
-
+                let text = super::feedback_text::stats_text(&stats);
                 Ok(CallToolResult::success(vec![Content::text(text)]))
             }
         }
