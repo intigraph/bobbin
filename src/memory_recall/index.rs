@@ -112,9 +112,8 @@ pub enum Change {
 #[derive(Debug, Default)]
 pub struct Page {
     pub changes: Vec<Change>,
-    /// `(cursor, iri)` of the last row kept (not the sentinel): the position
-    /// the next page starts after.
-    pub last_cursor: Option<(String, String)>,
+    /// Cursor of the last row kept (not the sentinel).
+    pub last_cursor: Option<String>,
     /// The overflow sentinel was present.
     pub overflow: bool,
 }
@@ -152,7 +151,7 @@ pub fn decode_page(body: &serde_json::Value) -> Result<Page> {
             continue;
         };
         if let Some(c) = cell(row, "cursor") {
-            page.last_cursor = Some((c, iri.clone()));
+            page.last_cursor = Some(c);
         }
         if !seen.insert(iri.clone()) {
             continue;
@@ -189,8 +188,11 @@ pub fn apply(mirror: &mut Mirror, changes: Vec<Change>, now_rfc3339: &str) -> (u
                 }
             }
             Change::Upsert(item) => {
-                mirror.items.insert(item.iri.clone(), item);
-                up += 1;
+                // A re-read row (see `rewind_cursor`) is not a change.
+                if mirror.items.get(&item.iri) != Some(&item) {
+                    mirror.items.insert(item.iri.clone(), item);
+                    up += 1;
+                }
             }
             Change::Remove(iri) => {
                 if mirror.items.remove(&iri).is_some() {
@@ -246,14 +248,14 @@ fn read_token() -> Option<String> {
 async fn fetch_page(
     client: &reqwest::Client,
     endpoint: &str,
-    since: &(String, String),
+    since: &str,
     token: Option<&str>,
 ) -> Result<serde_json::Value> {
     let mut req = client
         .post(format!("{endpoint}/ask"))
         .json(&serde_json::json!({
             "name": INDEX_QUERY,
-            "params": { "since": since.0, "since_iri": since.1 },
+            "params": { "since": since },
         }));
     if let Some(t) = token {
         req = req.bearer_auth(t);
@@ -320,7 +322,11 @@ async fn pull(endpoint: &str, mirror: &mut Mirror) -> Result<RefreshReport> {
     let mut report = RefreshReport::default();
     // Work on a copy: a refresh that fails halfway leaves the mirror as it was
     // (stale and saying so), never half-applied.
-    let mut cursor = (mirror.cursor.clone(), mirror.cursor_iri.clone());
+    // Start one second before the stored cursor: a supersession stamped in
+    // the same second as the cursor can sort before it and would otherwise be
+    // missed, leaving a stale record in the mirror. Re-read rows are
+    // idempotent (keyed by version IRI), so the overlap costs nothing.
+    let mut cursor = rewind_cursor(&mirror.cursor);
     let mut staged: Vec<Change> = Vec::new();
     loop {
         let body = fetch_page(&client, endpoint, &cursor, token.as_deref()).await?;
@@ -349,10 +355,28 @@ async fn pull(endpoint: &str, mirror: &mut Mirror) -> Result<RefreshReport> {
     for iri in &expired {
         mirror.items.remove(iri);
     }
-    (mirror.cursor, mirror.cursor_iri) = cursor;
+    mirror.cursor = cursor;
     report.upserted = up;
     report.removed = rm + expired.len();
     Ok(report)
+}
+
+/// The position one second before `cursor` (`<recordedAt>|<iri>`): the
+/// timestamp moved back a second with an empty IRI part, which sorts before
+/// every row of that second. An empty or unparseable cursor is returned as is.
+#[must_use]
+pub fn rewind_cursor(cursor: &str) -> String {
+    let ts = cursor.split('|').next().unwrap_or_default();
+    match chrono::DateTime::parse_from_rfc3339(ts) {
+        Ok(t) => {
+            let back = t.with_timezone(&chrono::Utc) - chrono::Duration::seconds(1);
+            format!(
+                "{}|",
+                back.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+            )
+        }
+        Err(_) => cursor.to_string(),
+    }
 }
 
 fn short_error(e: &anyhow::Error) -> String {

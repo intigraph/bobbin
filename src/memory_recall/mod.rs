@@ -25,23 +25,22 @@
 //! ## The query bobbin consumes (`mem_index_since`)
 //!
 //! The camayoc per-entity recall queries are being built in parallel
-//! (aegis-gshu.10). Until they ship, this is the interface bobbin consumes, and
-//! `tests/fixtures/agent-memory/mem_index_since.json` is a stub with exactly
-//! this shape, run against a local quipu store in the tests:
+//! (aegis-gshu.10); camayoc `queries/mem_index_since.json` implements this
+//! interface, and `tests/fixtures/agent-memory/mem_index_since.json` is a stub
+//! of the same shape, run against a local quipu store in the tests:
 //!
 //! - Called as `POST {quipu}/ask {"name": "mem_index_since", "params":
-//!   {"since": <cursor>, "since_iri": <iri>}}`. The first call passes both empty.
-//! - The page position is the pair `(cursor, iri)`, never `cursor` alone: rows
-//!   are ordered by `cursor` then by the IRI's string form, and a row is after
-//!   the position when `cursor > since`, or `cursor = since` and
-//!   `str(iri) > since_iri`. With `cursor` alone, rows sharing a timestamp
-//!   across a page boundary would be skipped.
+//!   {"since": <cursor>}}`. The first call passes `since = ""`.
+//! - `cursor` is `<recordedAt>|<iri>`: the change time (fixed-width UTC) and
+//!   the row's IRI, so it orders by time then IRI and is unique per row. Rows
+//!   come back ordered by it, after `since`. A timestamp-only cursor would
+//!   drop rows sharing a timestamp across a page boundary.
 //! - Returns at most [`PAGE_LIMIT`] + 1 rows; the extra row is the overflow
-//!   sentinel and means "call again from the last row's `(cursor, iri)`".
+//!   sentinel and means "call again from the last row's cursor".
 //! - Columns: `iri`, `naturalKey`, `kind` (class IRI), `label`, `body`,
 //!   `sourceKind`, `recordedAt`, `status` (`current` | `superseded` |
-//!   `expired` | `retracted`), `cursor` (a fixed-width UTC timestamp string:
-//!   when the row changed). Optional: `reviewAfter`, `expiresAt`.
+//!   `expired` | `retracted`), `cursor` (opaque to bobbin; see above).
+//!   Optional: `reviewAfter`, `expiresAt`.
 //! - A superseded record comes back once more with `status = superseded` at
 //!   the cursor of the record that superseded it, which is how bobbin learns to
 //!   delete it.
@@ -143,9 +142,6 @@ pub struct Mirror {
     /// The last row's `cursor`; passed back as `since`.
     #[serde(default)]
     pub cursor: String,
-    /// The last row's IRI; passed back as `since_iri` (see the module docs).
-    #[serde(default)]
-    pub cursor_iri: String,
     /// Current records by IRI.
     #[serde(default)]
     pub items: BTreeMap<String, MemoryItem>,

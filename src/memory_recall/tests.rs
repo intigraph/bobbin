@@ -68,10 +68,7 @@ fn decode_page_reads_quipu_cells_and_statuses() {
     });
     let page = decode_page(&body).unwrap();
     assert!(!page.overflow);
-    assert_eq!(
-        page.last_cursor,
-        Some(("2026-10-02T00:00:00Z".to_string(), "urn:b".to_string()))
-    );
+    assert_eq!(page.last_cursor.as_deref(), Some("2026-10-02T00:00:00Z"));
     assert_eq!(
         page.changes.len(),
         2,
@@ -96,10 +93,7 @@ fn decode_page_flags_overflow_sentinel_and_drops_it() {
     let page = decode_page(&serde_json::json!({ "rows": rows })).unwrap();
     assert!(page.overflow);
     assert_eq!(page.changes.len(), PAGE_LIMIT);
-    assert_eq!(
-        page.last_cursor,
-        Some(("049".to_string(), "urn:i049".to_string()))
-    );
+    assert_eq!(page.last_cursor.as_deref(), Some("049"));
 }
 
 #[test]
@@ -353,6 +347,30 @@ async fn refresh_records_unreachable_quipu() {
 }
 
 #[test]
+fn rewind_cursor_steps_back_one_second() {
+    assert_eq!(
+        rewind_cursor("2026-10-20T09:00:00Z|urn:mem/x"),
+        "2026-10-20T08:59:59Z|"
+    );
+    assert_eq!(rewind_cursor(""), "");
+    assert_eq!(rewind_cursor("opaque"), "opaque");
+}
+
+#[test]
+fn reapplying_the_same_row_is_not_a_change() {
+    let i = item(
+        "urn:k/1",
+        "Decision",
+        "a",
+        "b",
+        "crew:declared",
+        "2026-10-01",
+    );
+    let mut m = mirror_of(vec![i.clone()]);
+    assert_eq!(apply(&mut m, vec![Change::Upsert(i)], NOW), (0, 0));
+}
+
+#[test]
 fn refresh_lock_is_exclusive_and_released_on_drop() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("memory-mirror.json");
@@ -557,8 +575,10 @@ mod local_quipu {
                rdfs:comment \"Run disruptive deploys between 01:00 and 06:00 ET\" ;\n\
                aegis:sourceKind \"crew:declared\" ;\n\
                aegis:recordedAt \"2026-10-27T00:00:00Z\" ;\n\
+               aegis:indexCursor \"2026-10-27T00:00:00Z|{new}\" ;\n\
                aegis:supersedes <{old}> .\n\
-             <{old}> aegis:supersededBy <{new}> .\n"
+             <{old}> aegis:supersededBy <{new}> ;\n\
+               aegis:supersededCursor \"2026-10-27T00:00:00Z|{old}\" .\n"
         );
         knot(&mut store.lock().unwrap(), &ttl, "2026-10-27T01:00:00Z");
 
@@ -584,11 +604,44 @@ mod local_quipu {
     }
 
     #[tokio::test]
+    async fn supersession_in_the_cursor_second_is_not_missed() {
+        // A supersession stamped in the cursor's own second whose feed cursor
+        // does not sort after the stored one: only the one-second re-read
+        // sees it.
+        let store = Arc::new(Mutex::new(fixture_store()));
+        let endpoint = serve(store.clone()).await;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("memory-mirror.json");
+        refresh(&endpoint, &path).await.unwrap();
+        let cursor = load_mirror(&path).unwrap().cursor;
+        let second = cursor.split('|').next().unwrap().to_string();
+
+        // The record holding the cursor itself: its supersession row has a
+        // cursor equal to the stored one, which a strict `> since` skips.
+        let old = cursor.split('|').nth(1).unwrap().to_string();
+        let ttl = format!(
+            "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
+             <{old}> aegis:supersededBy <urn:aaa:newer> ;\n\
+               aegis:supersededCursor \"{second}|{old}\" .\n\
+             <urn:aaa:newer> aegis:recordedAt \"{second}\" .\n"
+        );
+        assert!(
+            format!("{second}|{old}") <= cursor,
+            "fixture must not sort after the cursor"
+        );
+        knot(&mut store.lock().unwrap(), &ttl, "2026-10-27T03:00:00Z");
+
+        let report = refresh(&endpoint, &path).await.unwrap();
+        assert_eq!(report.removed, 1, "{report:?}");
+        assert!(!load_mirror(&path).unwrap().items.contains_key(&old));
+    }
+
+    #[tokio::test]
     async fn same_timestamp_rows_across_a_page_boundary_are_not_dropped() {
         let mut store = fixture_store();
-        // 120 records changed in the same second: more than two pages, all
-        // sharing one cursor value. Paging on the timestamp alone loses all
-        // but the first page of them.
+        // 120 records changed in the same second: more than two pages sharing
+        // one timestamp. The '<recordedAt>|<iri>' cursor keeps every row; a
+        // timestamp-only cursor would lose all but the first page of them.
         let mut ttl = String::from(
             "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
              @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n",
@@ -599,7 +652,8 @@ mod local_quipu {
                    aegis:naturalKey <http://aegis.gastown.local/ontology/mem/lesson/bulk/t{n:03}> ;\n\
                    rdfs:label \"Bulk lesson {n}\" ;\n\
                    aegis:sourceKind \"crew:inferred\" ;\n\
-                   aegis:recordedAt \"2026-10-15T00:00:00Z\" .\n"
+                   aegis:recordedAt \"2026-10-15T00:00:00Z\" ;\n\
+                   aegis:indexCursor \"2026-10-15T00:00:00Z|http://aegis.gastown.local/ontology/mem/lesson/bulk/t{n:03}/20261015T000000Z\" .\n"
             ));
         }
         knot(&mut store, &ttl, "2026-10-27T02:00:00Z");
