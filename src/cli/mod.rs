@@ -264,8 +264,15 @@ impl Commands {
 }
 
 impl Cli {
+    pub fn is_prime(&self) -> bool {
+        matches!(self.command, Commands::Prime(_))
+    }
+
     /// Provision only for a local index, before Tokio and the ORT singleton start.
     pub fn prepare_gpu(&self) -> Result<()> {
+        if self.is_prime() {
+            return Ok(());
+        }
         if resolve_server_url(self.server.clone()).is_none() {
             if let Commands::Index(args) = &self.command {
                 let path = crate::config::Config::config_path(&args.path);
@@ -280,6 +287,22 @@ impl Cli {
     }
 
     pub async fn run(self) -> Result<()> {
+        // Prime is local and read-only: no config/server discovery, roles,
+        // command metrics, model provisioning or unrelated store opens.
+        if let Commands::Prime(args) = self.command {
+            return prime::run(
+                args,
+                OutputConfig {
+                    json: self.json,
+                    quiet: self.quiet,
+                    verbose: self.verbose,
+                    server: None,
+                    role: String::new(),
+                },
+            )
+            .await;
+        }
+
         let resolved_role = crate::access::RepoFilter::resolve_role(self.role.as_deref());
         // Resolve server URL: --server flag / BOBBIN_SERVER env > repo config > global config
         let resolved_server = resolve_server_url(self.server);
@@ -322,7 +345,7 @@ impl Cli {
         let result = dispatch_command(command, output).await;
 
         // Best-effort metrics emission (don't skip hooks — they emit their own events)
-        if command_name != "hook" {
+        if command_name != "hook" && command_name != "prime" {
             if let Some(repo_root) = find_bobbin_root() {
                 let source = crate::metrics::resolve_source(metrics_source.as_deref(), None);
                 let ev = crate::metrics::event(

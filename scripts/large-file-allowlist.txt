@@ -40,8 +40,8 @@ src/index/embedder.rs 1068
 src/index/git.rs 2002
 src/index/parser.rs 1544
 src/index/resolver.rs 530
-src/mcp/server.rs 3580
-src/mcp/tools.rs 1410
+src/mcp/server.rs 3456
+src/mcp/tools.rs 1409
 src/reactions.rs 2397
 src/search/context.rs 3149
 src/search/query.rs 1051

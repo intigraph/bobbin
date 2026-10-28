@@ -517,7 +517,7 @@ pub struct HotspotItem {
 pub struct PrimeRequest {
     /// Show only a specific section (e.g. "architecture", "commands", "mcp tools")
     #[schemars(
-        description = "Optional section name to show. Available: 'what bobbin does', 'architecture', 'supported languages', 'key commands', 'mcp tools', 'quick start', 'configuration'. Omit to show the full primer."
+        description = "Optional case-insensitive heading prefix: 'what bobbin is', 'agent workflow', 'core commands', 'mcp tools', 'architecture', 'configuration', or 'next steps'. Legacy 'commands', 'key commands' and 'what bobbin does' aliases remain. Omit for the full shared primer."
     )]
     pub section: Option<String>,
 

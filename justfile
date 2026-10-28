@@ -197,3 +197,19 @@ test-changelog:
 installer-check:
     sh -n install.sh
     python3 scripts/test-install-release.py
+
+# Focused stack prime checks; runtime tests require the crew HOME guard.
+prime action="test":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(action)}} in
+        check) cargo check --locked --features knowledge --all-targets ;;
+        check-default) cargo check --locked --all-targets ;;
+        lint) cargo clippy --locked --features knowledge --all-targets ;;
+        fmt) cargo fmt --check ;;
+        format) cargo fmt ;;
+        size) bash scripts/check-file-size.sh --all ;;
+        ratchet) bash scripts/check-file-size.sh --update-allowlist ;;
+        test) cargo test --locked --features knowledge --bin bobbin cli::prime:: && cargo test --locked --features knowledge --test cli_prime --test prime_sync ;;
+        *) echo 'Use: just prime check|check-default|lint|fmt|format|size|ratchet|test' >&2; exit 2 ;;
+    esac

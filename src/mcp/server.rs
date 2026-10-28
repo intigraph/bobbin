@@ -1911,15 +1911,8 @@ impl BobbinMcpServer {
             return remote.prime(&req).await;
         }
 
-        const PRIMER: &str = include_str!("../../docs/primer.md");
-
-        let primer_text = if let Some(ref section) = req.section {
-            Self::extract_primer_section(PRIMER, section)
-        } else if req.brief.unwrap_or(false) {
-            Self::extract_primer_brief(PRIMER)
-        } else {
-            PRIMER.to_string()
-        };
+        let primer_text =
+            crate::primer::legacy_text(req.section.as_deref(), req.brief.unwrap_or(false));
 
         // Gather live stats
         let stats = match self.open_vector_store().await {
@@ -3182,73 +3175,6 @@ impl BobbinMcpServer {
             }
         }
         SimilarTarget::Text(s.to_string())
-    }
-
-    fn extract_primer_brief(primer: &str) -> String {
-        let mut result = String::new();
-        let mut heading_count = 0;
-
-        for line in primer.lines() {
-            if line.starts_with("## ") {
-                heading_count += 1;
-                if heading_count > 1 {
-                    break;
-                }
-            }
-            result.push_str(line);
-            result.push('\n');
-        }
-
-        result.trim_end().to_string()
-    }
-
-    fn extract_primer_section(primer: &str, query: &str) -> String {
-        let query_lower = query.to_lowercase();
-        let sections = [
-            "what bobbin does",
-            "architecture",
-            "supported languages",
-            "key commands",
-            "mcp tools",
-            "quick start",
-            "configuration",
-        ];
-
-        let target = sections
-            .iter()
-            .find(|s| s.contains(&query_lower.as_str()) || query_lower.contains(*s))
-            .copied()
-            .unwrap_or(query_lower.as_str());
-
-        let mut result = String::new();
-        let mut capturing = false;
-
-        for line in primer.lines() {
-            if line.starts_with("## ") {
-                if capturing {
-                    break;
-                }
-                let heading = line.trim_start_matches('#').trim().to_lowercase();
-                if heading.contains(target) || target.contains(heading.as_str()) {
-                    capturing = true;
-                }
-            }
-
-            if capturing {
-                result.push_str(line);
-                result.push('\n');
-            }
-        }
-
-        if result.is_empty() {
-            format!(
-                "Section '{}' not found. Available sections: {}",
-                query,
-                sections.join(", ")
-            )
-        } else {
-            result.trim_end().to_string()
-        }
     }
 }
 

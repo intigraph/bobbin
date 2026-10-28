@@ -24,7 +24,7 @@
       "source": "src/cli/mod.rs",
       "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fcli%2Fmod.rs",
       "summary": "The Commands enum defines the public command surface, including search, context and portable index pack operations.",
-      "source_sha256": "21c85d361c229d3c536c329ee4cb43ff8eb2b0679e4663ea2e5cd32a10fc5577",
+      "source_sha256": "d02753acce4a732f894bf6df25fb5965a3e072e5598d1e990cde12d3883e1810",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "bobbin Commands enum"
@@ -35,7 +35,7 @@
       "source": "src/mcp/server.rs",
       "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fmcp%2Fserver.rs",
       "summary": "The MCP server advertises the tool interface; defining source is the authority for tool names, inputs and feature conditions.",
-      "source_sha256": "80696a61fd9220297d45e3ac65f791a18911de0db0add6b0030cec4dd76c443f",
+      "source_sha256": "8e567650f304b45994ba7395d5a755c85544b5bca6623328caa0a2bdf222d7db",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "Bobbin MCP tools"

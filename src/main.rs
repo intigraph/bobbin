@@ -20,6 +20,7 @@ mod operational_metrics;
 /// The agent's current work item, published by the harness and read (never
 /// asked for) — what makes retrieval cumulative rather than per-prompt.
 pub mod plate;
+mod primer;
 pub mod reactions;
 mod read_path;
 mod runtime_check;
@@ -207,13 +208,18 @@ fn main() -> Result<()> {
     let mut args = std::env::args_os().skip(1);
     if args.next().as_deref() == Some(std::ffi::OsStr::new(runtime_check::PROBE)) {
         let model = args.next().context("ONNX validation requires a model")?;
-        anyhow::ensure!(args.next().is_none(), "Unexpected ONNX validation arguments");
+        anyhow::ensure!(
+            args.next().is_none(),
+            "Unexpected ONNX validation arguments"
+        );
         ensure_ort_dylib();
         return runtime_check::run_probe(std::path::Path::new(&model));
     }
     let cli = Cli::parse();
     cli.prepare_gpu()?;
-    ensure_ort_dylib();
+    if !cli.is_prime() {
+        ensure_ort_dylib();
+    }
     run(cli)
 }
 
