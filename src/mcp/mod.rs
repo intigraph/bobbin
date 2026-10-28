@@ -4,6 +4,7 @@
 //! Model Context Protocol, allowing AI agents (Claude, Cursor) to use Bobbin as a tool.
 
 mod bead_response;
+mod feedback_text;
 mod knowledge_tools;
 mod local_graph_tools;
 mod remote;

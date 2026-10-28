@@ -35,7 +35,7 @@
       "source": "src/mcp/server.rs",
       "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fmcp%2Fserver.rs",
       "summary": "The MCP server advertises the tool interface; defining source is the authority for tool names, inputs and feature conditions.",
-      "source_sha256": "6920e57b781e74914710336a421304c63c4b1474caf7682baf200f84a313b008",
+      "source_sha256": "843e8b61064544ae946f5022418c2cbf74e409e9950437c59288c00e6f677499",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "Bobbin MCP tools"

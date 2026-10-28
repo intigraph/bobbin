@@ -2539,24 +2539,14 @@ impl BobbinMcpServer {
                 valid_ratings.join(", ")
             ))]));
         }
-        let item = req
-            .item
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(String::from);
-        if let Some(ref it) = item {
-            if !crate::storage::feedback::is_valid_item(it) {
+        let item = match super::feedback_text::check_item(&req.rating, req.item.as_deref()) {
+            Ok(item) => item,
+            Err(msg) => {
                 return Ok(CallToolResult::success(vec![Content::text(format!(
-                    "Error: item '{it}' is not a cited item id (expected m1..m5 from the [m<n>] lines)"
-                ))]));
+                    "Error: {msg}"
+                ))]))
             }
-        }
-        if req.rating == "used" && item.is_none() {
-            return Ok(CallToolResult::success(vec![Content::text(
-                "Error: rating 'used' rates one cited memory item; pass item (m1..m5)",
-            )]));
-        }
+        };
 
         let agent = req.agent.unwrap_or_else(|| {
             std::env::var("GT_ROLE")
@@ -2598,13 +2588,10 @@ impl BobbinMcpServer {
             .store_feedback(&input)
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
-        let target = match &item {
-            Some(it) => format!("{injection_id} {it}"),
-            None => injection_id.clone(),
-        };
         Ok(CallToolResult::success(vec![Content::text(format!(
             "Feedback recorded: {} for {}",
-            req.rating, target
+            req.rating,
+            super::feedback_text::target(&injection_id, item.as_deref())
         ))]))
     }
 
@@ -2654,14 +2641,8 @@ impl BobbinMcpServer {
             } else {
                 &r.timestamp
             };
-            let id = match &r.item {
-                Some(it) => format!("{} {}", r.injection_id, it),
-                None => r.injection_id.clone(),
-            };
+            let id = super::feedback_text::target(&r.injection_id, r.item.as_deref());
             let mut line = format!("[{}] {} | {} | {}", id, ts, r.rating, r.agent);
-            if let Some(iri) = &r.iri {
-                line.push_str(&format!(" | {iri}"));
-            }
             if !r.reason.is_empty() {
                 let truncated: String = r.reason.chars().take(100).collect();
                 line.push_str(&format!(" | {}", truncated));
@@ -2736,46 +2717,7 @@ impl BobbinMcpServer {
                     .stats()
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
-                let rate = if stats.total_injections > 0 {
-                    format!(
-                        "{:.0}%",
-                        stats.total_feedback as f64 / stats.total_injections as f64 * 100.0
-                    )
-                } else {
-                    "N/A".to_string()
-                };
-
-                let mut text = format!(
-                    "Injections: {}\nFeedback: {} ({} coverage)\n  useful: {}\n  noise: {}\n  harmful: {}\n  used: {}",
-                    stats.total_injections,
-                    stats.total_feedback,
-                    rate,
-                    stats.useful,
-                    stats.noise,
-                    stats.harmful,
-                    stats.used
-                );
-                if !stats.memory_entities.is_empty() {
-                    text.push_str(&format!(
-                        "\nMemory items: {} item ratings\n  {:<9} {:>4} {:>6} {:>5} {:>7}  entity",
-                        stats.item_feedback, "kind", "inj", "used", "noise", "harmful"
-                    ));
-                    for e in &stats.memory_entities {
-                        text.push_str(&format!(
-                            "\n  {:<9} {:>4} {:>6} {:>5} {:>7}  {}",
-                            e.kind, e.injected, e.used, e.noise, e.harmful, e.iri
-                        ));
-                    }
-                }
-
-                if stats.lineage_records > 0 || stats.actioned > 0 {
-                    let text = format!(
-                        "{}\nLineage: {} records\n  actioned: {}\n  unactioned: {}",
-                        text, stats.lineage_records, stats.actioned, stats.unactioned
-                    );
-                    return Ok(CallToolResult::success(vec![Content::text(text)]));
-                }
-
+                let text = super::feedback_text::stats_text(&stats);
                 Ok(CallToolResult::success(vec![Content::text(text)]))
             }
         }
