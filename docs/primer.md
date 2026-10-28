@@ -1,8 +1,22 @@
-# Bobbin Primer
+# Bobbin agent primer
 
-Bobbin is a local-first code context engine — semantic search, keyword search, git coupling analysis, and context assembly, all running locally with no API keys.
+## What Bobbin is
 
-## Commands
+Bobbin is a local-first code context engine for agents.
+It combines semantic search, keyword search, git coupling and context assembly.
+Indexes live in LanceDB and SQLite alongside the repository.
+Search and context work locally without API keys.
+Quipu supplies shared knowledge; Yupana supplies structural change analysis.
+
+## Agent workflow
+
+1. Search before scanning files: `bobbin search "<intent>"`.
+2. Read a returned chunk or assemble context with `bobbin context "<task>"`.
+3. Ask `bobbin impact <file>` for related files; use Yupana for structural callers.
+4. Check `bobbin status` before trusting an empty result; reindex with `bobbin index`.
+5. Treat an old index or a failed read as unknown, not as proof of absence.
+
+## Core commands
 
 | Command | What it does | Docs |
 |---------|-------------|------|
@@ -72,7 +86,22 @@ Languages: Rust, TypeScript, Python, Go, Java, C++, Markdown. Others use line-ba
 
 ## MCP Tools
 
-When running as MCP server (`bobbin serve`): `search`, `grep`, `context`, `related`, `test_coverage`, `find_refs`, `list_symbols`, `read_chunk`, `hotspots`, `impact`, `review`, `similar`, `dependencies`, `file_history`, `status`, `search_beads`, `commit_search`, `prime`.
+When running as MCP server (`bobbin serve`):
+
+| Tool | Use |
+| --- | --- |
+| `search` / `grep` | Semantic, keyword and regex search |
+| `context` | Assemble a bounded task context |
+| `related` / `impact` | Git coupling and predicted affected files |
+| `test_coverage` | Find related tests |
+| `find_refs` / `list_symbols` | Definitions, usages and symbols |
+| `read_chunk` | Read one indexed chunk |
+| `hotspots` / `review` | Churn and diff-aware review context |
+| `similar` | Find similar code |
+| `dependencies` / `file_history` | Imports and file history |
+| `status` | Index state |
+| `search_beads` / `commit_search` | Search indexed work and commits |
+| `prime` | This shared agent primer and index statistics |
 
 → Full tool reference: `docs/book/src/mcp/tools.md`
 
@@ -102,3 +131,9 @@ All docs live in `docs/book/`:
 | Configuration | `docs/book/src/config/` — full config.toml reference, section-by-section |
 | Architecture | `docs/book/src/architecture/` — storage, embedding, language support |
 | MCP | `docs/book/src/mcp/` — tools reference, client config, HTTP mode |
+
+## Next steps
+
+- Book: <https://intigraph.github.io/bobbin/>
+- Skill: `skills/bobbin/SKILL.md`
+- CLI help: `bobbin --help` and `bobbin help <command>`
