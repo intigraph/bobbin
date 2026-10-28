@@ -211,10 +211,22 @@ fn backlog_header() -> Option<String> {
     let root = std::env::var_os("XDG_STATE_HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|home| home.join(".local/state")))?;
-    let records = backlog_count(&root.join("camayoc/memory-queue.jsonl"));
-    let captures = backlog_count(&root.join("camayoc/capture-spool.jsonl"));
-    backlog_status(records.zip(captures).and_then(|(a, b)| a.checked_add(b)))
+        .or_else(|| {
+            directories::BaseDirs::new().map(|dirs| dirs.home_dir().join(".local/state"))
+        })?;
+    backlog_status(backlog_total(&root))
+}
+
+fn backlog_total(root: &std::path::Path) -> Option<usize> {
+    [
+        "memory-queue.jsonl",
+        "capture-spool.inflight.jsonl",
+        "capture-spool.jsonl",
+    ]
+    .into_iter()
+    .try_fold(0usize, |total, name| {
+        total.checked_add(backlog_count(&root.join("camayoc").join(name))?)
+    })
 }
 
 fn backlog_status(count: Option<usize>) -> Option<String> {
@@ -397,7 +409,7 @@ mod tests {
 
 #[cfg(test)]
 mod backlog_tests {
-    use super::{backlog_count, backlog_status};
+    use super::{backlog_count, backlog_status, backlog_total};
 
     #[test]
     fn header_counts_pending_and_never_hides_unknown_as_zero() {
@@ -406,6 +418,21 @@ mod backlog_tests {
             .unwrap()
             .contains("3 queued (cy flush)"));
         assert!(backlog_status(None).unwrap().contains("backlog: UNKNOWN"));
+    }
+
+    #[test]
+    fn legacy_inflight_is_pending_and_unreadable_prefix_is_unknown() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join("camayoc");
+        std::fs::create_dir(&state).unwrap();
+        let prefix = state.join("capture-spool.inflight.jsonl");
+        std::fs::write(&prefix, "{}\n").unwrap();
+        assert_eq!(backlog_total(dir.path()), Some(1));
+        std::fs::write(state.join("capture-spool.jsonl"), "{}\n{}\n").unwrap();
+        assert_eq!(backlog_total(dir.path()), Some(3));
+        std::fs::write(&prefix, "{partial").unwrap();
+        assert_eq!(backlog_total(dir.path()), None);
+        assert_eq!(std::fs::read_to_string(&prefix).unwrap(), "{partial");
     }
 
     #[test]
