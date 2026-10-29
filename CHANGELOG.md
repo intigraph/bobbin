@@ -21,6 +21,21 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.32.0](https://github.com/intigraph/bobbin/compare/v0.31.0...v0.32.0) (2026-10-29)
+
+
+### Features
+
+* **hook:** memory anchor at compaction through the existing compact handler (aegis-gshu.5) ([#218](https://github.com/intigraph/bobbin/issues/218)) ([bad82eb](https://github.com/intigraph/bobbin/commit/bad82eb8e6ef59e70d3f6e3669f79703a5813afc))
+* **hook:** per-prompt memory recall lane + item citations in feedback ([#216](https://github.com/intigraph/bobbin/issues/216)) ([eb62da8](https://github.com/intigraph/bobbin/commit/eb62da85a9aecfa4739c9ed13e804b754f7d71cc))
+* **prime:** align bobbin prime to the stack prime contract (aegis-km3g.2) ([#215](https://github.com/intigraph/bobbin/issues/215)) ([dd84821](https://github.com/intigraph/bobbin/commit/dd84821f3368d4191d2990f7df532ec3f18e4ce1))
+* **recall:** show the cy offline backlog count in the memory recall header (aegis-gshu.7) ([#217](https://github.com/intigraph/bobbin/issues/217)) ([fc7e550](https://github.com/intigraph/bobbin/commit/fc7e550b557070f09a77971acbf81801bff7eef8))
+
+
+### Bug Fixes
+
+* **release:** report pendant publisher admission before readback ([#209](https://github.com/intigraph/bobbin/issues/209)) ([89b577e](https://github.com/intigraph/bobbin/commit/89b577e19ab099ae6378c913b12066c13712bd9a))
+
 ## [0.31.0](https://github.com/intigraph/bobbin/compare/v0.30.0...v0.31.0) (2026-10-24)
 
 
