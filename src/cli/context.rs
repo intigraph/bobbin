@@ -255,12 +255,13 @@ pub async fn run(args: ContextArgs, output: OutputConfig) -> Result<()> {
         };
         match quipu::Store::open(qpath.to_string_lossy().as_ref()) {
             Ok(store) => assembler = assembler.with_quipu_store(store),
-            Err(e) => {
+            Err(_) => {
                 if !output.quiet && !output.json {
+                    // Store errors can include the private absolute database path.
+                    // Keep the fallback visible without copying that error chain.
                     eprintln!(
-                        "  {} PPR enabled but Quipu store unavailable: {}",
-                        "!".yellow(),
-                        e
+                        "  {} Quipu PPR unavailable; using index-only context.",
+                        "!".yellow()
                     );
                 }
             }
