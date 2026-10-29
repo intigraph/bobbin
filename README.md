@@ -7,6 +7,14 @@ repositories. Use its command line, Model Context Protocol (MCP) server, or
 agent hooks to find code by meaning, search exact words, and discover files
 that change together. Local indexing and search need no API key.**
 
+## Why you would want it
+
+- **Find code by meaning:** search implementations with a description of their purpose.
+- **Collect context before editing:** combine indexed code with Quipu knowledge when configured.
+- **Inspect related changes:** use history and co-change signals alongside exact search.
+
+[The Bobbin book](https://intigraph.github.io/bobbin/) covers search, indexing and agent integration.
+
 ## Install
 
 ```sh
@@ -22,7 +30,7 @@ Set `STACK_INSTALL_ROOT` on the receiving shell for another prefix.
 Pinned releases, alternatives, configuration and removal are in the
 [installation and usage reference](docs/installation-reference.md).
 
-## Try it
+## First success in three commands
 
 Run in a shell with Python 3 and Git installed. This creates a disposable project;
 initial indexing downloads the embedding model and runs locally on the CPU.
@@ -42,7 +50,57 @@ greeting:1-2
 Bobbin found a parsed function, with its source range, in the index you just built.
 See the [quick start](https://scbrown.github.io/bobbin/getting-started/quick-start.html) for semantic search.
 
-## Next steps
+## On your own code
+
+Run `bobbin init` and `bobbin index` from your repository first.
+
+| Question | Command |
+|---|---|
+| Where is error handling implemented? | `bobbin search "error handling"` |
+| What context would help fix login? | `bobbin context "fix the login bug"` |
+| Where does an exact name appear? | `bobbin grep greeting` |
+| What changes alongside this file? | `bobbin related greeting.py` |
+| What is indexed? | `bobbin status` |
+
+See the [CLI reference](https://scbrown.github.io/bobbin/cli/overview.html) for flags and additional commands.
+
+## Wire it into your agent
+
+From the indexed repository, `bobbin serve` starts an MCP server on standard input/output.
+Register it by **absolute path**: MCP clients launch servers without your shell's `PATH`,
+so a bare `bobbin` fails with `ENOENT`. For Claude Code, from the indexed repository:
+
+```bash
+claude mcp add bobbin -- "$(command -v bobbin)" serve "$PWD"
+```
+
+Other clients take the same command as JSON (use the output of `command -v bobbin`):
+
+```json
+{"mcpServers":{"bobbin":{"command":"/absolute/path/to/bobbin","args":["serve","/path/to/repo"]}}}
+```
+
+For automatic Claude Code context injection, run `bobbin hook install` in the
+repository; it updates that project's `.claude/settings.json`.
+See [agent setup](https://scbrown.github.io/bobbin/getting-started/agent-setup.html) for client configuration
+and [hooks](https://scbrown.github.io/bobbin/guides/hooks.html) for gating, deduplication and removal.
+Prefer MCP when available, then the CLI; the [HTTP API](https://scbrown.github.io/bobbin/mcp/http-mode.html)
+is the transport fallback.
+
+## Before you start
+
+The installer needs Python 3.9+, curl and Linux or macOS. Initial indexing
+requires disk space and a model download; CPU inference works without an API key.
+Run indexing from the repository you want searchable. Quipu integration needs
+its own configuration and does not follow from local indexing alone.
+
+## What's next
+
+- [The Bobbin book](https://intigraph.github.io/bobbin/): concepts and reference.
+- [Docs map](https://intigraph.github.io/bobbin/docs-map.html): find every guide.
+- [Quick start](https://intigraph.github.io/bobbin/getting-started/quick-start.html): index a repository.
+
+### Related tools and repository knowledge
 
 - [Tambo](https://github.com/intigraph/tambo): guided stack installation and verification.
 - [Camayoc](https://github.com/scbrown/camayoc): governed memory and vocabulary.
@@ -50,7 +108,7 @@ See the [quick start](https://scbrown.github.io/bobbin/getting-started/quick-sta
 
 **Load this repository’s graph:** public repository-pendant assets have not yet been verified. When a release supplies the archive, checksum and provenance, follow the [verified import workflow](https://scbrown.github.io/quipu/sharing/index.html): extract the share directory and use `quipu import SHARE_DIR --db repository.db`. Import stages knowledge; ROOT stays unchanged.
 
-## The stack
+## 🧺 The stack
 
 <!-- stack-table:start -->
 
@@ -75,5 +133,11 @@ when.
 | [shuttle](https://github.com/scbrown/shuttle) | runs signed agent workflows and keeps their records in Quipu |
 
 <!-- stack-table:end -->
+
+## Contributing
+
+Run `just check` and `just test` before submitting changes.
+
+## 📜 License
 
 [License](LICENSE).
