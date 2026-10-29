@@ -258,10 +258,12 @@ pub async fn run(args: ContextArgs, output: OutputConfig) -> Result<()> {
             Err(e) => {
                 if !output.quiet && !output.json {
                     eprintln!(
-                        "  {} PPR enabled but Quipu store unavailable: {}",
-                        "!".yellow(),
-                        e
+                        "  {} PPR enabled but Quipu store unavailable; continuing without graph ranking. Use --verbose for details.",
+                        "!".yellow()
                     );
+                    if output.verbose {
+                        eprintln!("    Quipu store error: {e:#}");
+                    }
                 }
             }
         }
