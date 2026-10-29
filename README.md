@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/bobbin-header.svg" width="100%" alt="Bobbin"/></p>
+<p align="center"><img src="assets/thread-workshop/bobbin.png" width="704" alt="bobbin: A thread spool gathers lines into context. Original pixel art in the Thread Workshop style."/></p>
 
 # bobbin
 
