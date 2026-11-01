@@ -3,7 +3,9 @@
 
 # arming: agent-invoked; run before publishing the repository-pendant source.
 """
+import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 from rdflib import Dataset, Graph, Literal, Namespace, RDF, RDFS, URIRef
 
@@ -156,6 +158,35 @@ class RepositoryQuery(unittest.TestCase):
             self.assertFalse(str(s).startswith(str(A)), s)
             if p not in (OWL_NS.sameAs, RDF.type) and isinstance(o, URIRef):
                 self.assertFalse(str(o).startswith(str(A)), o)
+
+    def test_build_admits_only_exact_former_name_links(self):
+        spec = importlib.util.spec_from_file_location(
+            "share_builder", Path(__file__).resolve().parents[1] / "scripts/build-repository-share.py")
+        builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(builder)
+        own = URIRef(str(A) + "doc/bobbin/README.md")
+        source = Graph()
+        source.add((own, RDF.type, A.Document))
+        source.add((own, A.filePath, Literal("README.md")))
+        new = "https://w3id.org/intigraph/bobbin/id/doc/README.md"
+        same = "<http://www.w3.org/2002/07/owl#sameAs>"
+        with tempfile.TemporaryDirectory() as work:
+            export = Path(work) / "export.nt"
+            export.write_bytes(source.query(QUERY).graph.serialize(format="nt", encoding="utf-8"))
+            self.assertEqual(builder.verify_former_names(export), 1)
+            refused = {
+                "arbitrary": f"<{new}> {same} <https://example.org/other> .",
+                "mismatched path": f"<{new}> {same} <{A}doc/bobbin/OTHER.md> .",
+                "other repository": f"<{new}> {same} <{A}doc/quipu/README.md> .",
+                "reverse": f"<{own}> {same} <{new}> .",
+                "public to public": f"<{new}> {same} <https://w3id.org/intigraph/quipu/id/doc/README.md> .",
+                "second link": f"<{new}> {same} <{own}> .\n<{new}> {same} <{own}> .",
+            }
+            for name, line in refused.items():
+                with self.subTest(name=name):
+                    export.write_text(line + "\n")
+                    with self.assertRaises(ValueError):
+                        builder.verify_former_names(export)
 
 if __name__ == '__main__':
     unittest.main()
