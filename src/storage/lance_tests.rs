@@ -4,6 +4,32 @@ use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use tempfile::tempdir;
 
+/// "The lock is free now", as a test means it: free once any instantaneous
+/// holder is gone. Every test in this binary runs in one process, and a test
+/// that spawns a child (git, the CLI) while another test has its lock file
+/// open hands the child a copy of that open file, flock included; the copy
+/// lives until the child execs. A just-dropped lock can therefore still be held
+/// for a few microseconds, and a zero-budget acquire flakes (aegis-cur: 1306 of
+/// 3000 immediate re-acquires failed alongside four threads spawning `true`,
+/// none without them, and none was still held after 2s). Contention assertions
+/// keep `LockWait::NoWait`: there the test itself holds the lock.
+const SETTLED: LockWait = LockWait::UpTo(std::time::Duration::from_secs(10));
+
+/// Take the maintenance lock once any instantaneous inherited holder is gone.
+fn take_lock_settled(store: &VectorStore) -> std::fs::File {
+    let started = std::time::Instant::now();
+    loop {
+        if let Some(lock) = store.try_maintenance_lock() {
+            return lock;
+        }
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "the maintenance lock stayed held for 10s with no holder in this test"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
 #[tokio::test]
 async fn bounded_fts_recovery_waits_and_eventually_succeeds() {
     let queries = Arc::new(AtomicUsize::new(0));
@@ -489,11 +515,11 @@ async fn maintenance_sweeps_every_table_not_just_chunks() {
 
     // And the sweep itself must succeed over multiple tables.
     store
-        .prune(LockWait::NoWait)
+        .prune(SETTLED)
         .await
         .expect("prune should sweep every table");
     store
-        .compact(LockWait::NoWait)
+        .compact(SETTLED)
         .await
         .expect("compact should sweep every table");
 
@@ -629,14 +655,12 @@ async fn maintenance_lock_is_exclusive_and_compact_skips_when_held() {
     );
 
     drop(held);
-    assert!(
-        other.try_maintenance_lock().is_some(),
-        "releasing the lock frees the next participant"
-    );
+    // Releasing the lock frees the next participant.
+    drop(take_lock_settled(&other));
     // And with the lock free, a real compaction runs clean.
     assert!(
         other
-            .compact(LockWait::NoWait)
+            .compact(SETTLED)
             .await
             .expect("uncontended compact runs")
             .ran(),
@@ -686,7 +710,7 @@ async fn scheduled_maintenance_waits_for_the_lock_instead_of_skipping() {
     );
 
     // A wait that expires still reports the skip rather than pretending.
-    let held = store.try_maintenance_lock().expect("retake the lock");
+    let held = take_lock_settled(&store);
     let outcome = other
         .compact(LockWait::UpTo(std::time::Duration::from_millis(200)))
         .await
@@ -744,7 +768,7 @@ async fn maintain_takes_the_lock_once_and_charges_one_wait_budget() {
     );
 
     // Uncontended, one call records BOTH operations.
-    let outcome = other.maintain(LockWait::NoWait).await.expect("sweep runs");
+    let outcome = other.maintain(SETTLED).await.expect("sweep runs");
     assert!(
         outcome.ran(),
         "uncontended maintain must run, got {outcome:?}"
@@ -786,7 +810,7 @@ async fn maintenance_status_is_shared_across_processes_and_throttles_the_read_pa
     );
 
     store
-        .compact(LockWait::NoWait)
+        .compact(SETTLED)
         .await
         .expect("compact runs")
         .ran()
@@ -811,9 +835,8 @@ async fn maintenance_status_is_shared_across_processes_and_throttles_the_read_pa
         status,
         "the record is visible to a fresh process"
     );
-    let guard = store
-        .try_maintenance_lock()
-        .expect("hold the lock so any attempt would be a visible skip");
+    // Hold the lock so any attempt would be a visible skip.
+    let guard = take_lock_settled(&store);
     fresh.compact_if_stale().await;
     drop(guard);
     // If compact_if_stale had attempted, it would have recorded an attempt
@@ -1363,7 +1386,7 @@ async fn test_fts_search_survives_compaction() {
 
     // Compaction can invalidate the FTS index; search must still succeed
     // (self-heal rebuild) rather than 500.
-    store.compact(LockWait::NoWait).await.unwrap();
+    store.compact(SETTLED).await.unwrap();
     let r2 = store.search_fts("authenticate", 10, None).await.unwrap();
     assert_eq!(r2.len(), 1, "FTS should still work after compaction");
 
@@ -2201,7 +2224,7 @@ async fn maintain_folds_unindexed_rows_into_the_fts_index() {
         Some((2, 1)),
         "control: one row outside"
     );
-    before.maintain(LockWait::NoWait).await.expect("sweep runs");
+    before.maintain(SETTLED).await.expect("sweep runs");
     let after = VectorStore::open(&path).await.unwrap();
     assert_eq!(
         after.fts_coverage().await.map(|c| c.1),
