@@ -178,8 +178,34 @@ def indexed_labels(binary, database, subjects):
     return labels
 
 
+def is_tracked_alias(link, target, files):
+    """True when symlink ``link`` -> ``target`` names a tracked regular file.
+
+    Agent files such as CLAUDE.md -> AGENTS.md are aliases of a file the
+    release already carries. Absolute, escaping, dangling and chained links,
+    and links to directories, are not.
+    """
+    if not target or target.startswith("/"):
+        return False
+    parts = []
+    for part in (Path(link).parent / target).parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not parts:
+                return False
+            parts.pop()
+        else:
+            parts.append(part)
+    return bool(parts) and Path(*parts) in files
+
+
 def materialize_release(source, revision, destination):
-    """Index only exact tracked release bytes in a new private source tree."""
+    """Index only exact tracked release bytes in a new private source tree.
+
+    A tracked alias of a tracked regular file is skipped rather than copied, so
+    its target is indexed once; any other non-file member refuses.
+    """
     destination = Path(destination)
     destination.mkdir(mode=0o700)
     archive = subprocess.run(
@@ -188,13 +214,15 @@ def materialize_release(source, revision, destination):
         capture_output=True,
     ).stdout
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
-        for member in bundle.getmembers():
+        members = bundle.getmembers()
+        files = {Path(member.name) for member in members if member.isfile()}
+        for member in members:
             relative = Path(member.name)
-            if (
-                relative.is_absolute()
-                or ".." in relative.parts
-                or not (member.isfile() or member.isdir())
-            ):
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ValueError("unsupported tracked release member")
+            if member.issym() and is_tracked_alias(relative, member.linkname, files):
+                continue
+            if not (member.isfile() or member.isdir()):
                 raise ValueError("unsupported tracked release member")
             target = destination / relative
             if member.isdir():
