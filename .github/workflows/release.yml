@@ -67,7 +67,7 @@ jobs:
             ort_asset: onnxruntime-linux-aarch64
             ort_version: "1.24.1"
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-15
             archive: tar.gz
             ort_asset: onnxruntime-osx-arm64
             ort_version: "1.24.1"
