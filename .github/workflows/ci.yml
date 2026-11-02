@@ -12,7 +12,14 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    env:
+      # Both feature arms otherwise retain large, distinct debug artifacts.
+      # Keep test execution and assertions intact; bound only debug metadata.
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
+      - name: Disk space before test job
+        run: df -h /
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       # A listed hook is not proof it executes: require both a benign control
@@ -115,6 +122,10 @@ jobs:
       # the failure is orchestration order, not Rust behavior.
       - name: Release asset publication contract
         run: python3 scripts/test-release-workflow-contract.py
+
+      - name: Disk space after test job
+        if: always()
+        run: df -h /
 
   # The eval framework's own 289 tests were run by NOTHING: `just test` is
   # cargo-only, `just check` does not reach them, and no workflow mentioned
