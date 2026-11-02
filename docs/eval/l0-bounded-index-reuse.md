@@ -21,7 +21,7 @@ remain identical. The two directories have the **same basename**: both native
 index labels and hook affinity depend on it. Copies use independent files, never
 hard links. The source must remain sealed and unchanged through the copy.
 
-The adapter currently supports only the frozen Linux native runtime:
+The original frozen Linux native runtime remains supported:
 
 - Bobbin 0.28.0, source `843dc42bae0cfd39718d29eaecb3b12fe6e8dbfe`;
 - executable SHA256 `9bebd2fad732dc20ae614d6d2df6829d480e5306b0cc6a7b28653c7b0ec69721`;
@@ -30,7 +30,9 @@ The adapter currently supports only the frozen Linux native runtime:
 
 A version label, wrapper script or another native build is insufficient. Add
 another runtime only with cold/derived native equivalence and refusal controls.
-The installed 0.29.0 is **not** silently enrolled. No model provider is called;
+A second exact Linux 0.31.0 binary is now admitted only with a pinned explicit
+ORT 1.24.1 library; see the [qualification](l0-native031-qualification.md).
+Other installed versions are **not** silently enrolled. No model provider is called;
 the exact complete model directory must already occupy the isolated native
 `XDG_CACHE_HOME/bobbin/models/<name>` cache.
 
