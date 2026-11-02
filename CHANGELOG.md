@@ -21,6 +21,13 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.33.0](https://github.com/intigraph/bobbin/compare/v0.32.0...v0.33.0) (2026-11-02)
+
+
+### Features
+
+* **eval:** qualify native 0.31 reuse with pinned CPU ORT ([#226](https://github.com/intigraph/bobbin/issues/226)) ([2502bb6](https://github.com/intigraph/bobbin/commit/2502bb686cb49f3b932f171974bbbd7f8e536e78))
+
 ## [0.32.0](https://github.com/intigraph/bobbin/compare/v0.31.0...v0.32.0) (2026-11-02)
 
 
