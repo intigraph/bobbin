@@ -34,6 +34,17 @@ SUPPORTED_RUNTIMES = {
             "onnx/model.onnx": "759c3cd2b7fe7e93933ad23c4c9181b7396442a2ed746ec7c1d46192c469c46e",
         },
     },
+    # Paired native controls: docs/eval/l0-native031-qualification.md.
+    # This build is admitted only with the exact tested dynamic CPU runtime.
+    "acc29d7a2371d9dfe7c7c47564ef4bf9ced5270882430dda16b9030cf9d25c3b": {
+        "source": "c204212178a56b2e8b7f161d1c1e68440a0f8dcf",
+        "model": "all-MiniLM-L6-v2",
+        "ort_sha256": "e5a7e3646718d8f1f8f52c8fcb770fe229ab44305caf3ea702d558e6e426c9aa",
+        "assets": {
+            "tokenizer.json": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",  # gitleaks:allow public model SHA256, not a credential
+            "onnx/model.onnx": "759c3cd2b7fe7e93933ad23c4c9181b7396442a2ed746ec7c1d46192c469c46e",
+        },
+    },
 }
 MAX_AGE = 21600
 MAX_BYTES = 512 * 1024**2
@@ -108,6 +119,15 @@ def identity(ws: Path, binary: Path, model: Path, overrides: dict | None) -> dic
     runtime = SUPPORTED_RUNTIMES.get(binary_sha)
     if runtime is None or runtime["model"] != model.name:
         raise ReuseRefused("native runtime/model has no paired derivation proof")
+    # load-dynamic makes the library bytes part of the qualified runtime.
+    # Never let the host loader choose an unmeasured library for this enrollment.
+    ort_sha = runtime.get("ort_sha256")
+    if ort_sha is not None:
+        ort_path = Path(os.environ.get("ORT_DYLIB_PATH", ""))
+        if not ort_path.is_absolute():
+            raise ReuseRefused("qualified runtime requires an absolute ORT_DYLIB_PATH")
+        if digest(ort_path) != ort_sha:
+            raise ReuseRefused("qualified ONNX runtime bytes changed")
     config = ws / ".bobbin/config.toml"
     cfg = tomllib.loads(config.read_text())
     if (cfg.get("quipu_push_chunks") is not False
@@ -128,8 +148,11 @@ def identity(ws: Path, binary: Path, model: Path, overrides: dict | None) -> dic
     if any(assets["files"][name]["sha256"] != expected
            for name, expected in runtime["assets"].items()):
         raise ReuseRefused("runtime's pinned model asset changed")
-    return {"source": source_identity(ws), "binary": binary_sha,
-            "config": digest(config), "models": assets, "overrides": overrides}
+    result = {"source": source_identity(ws), "binary": binary_sha,
+              "config": digest(config), "models": assets, "overrides": overrides}
+    if ort_sha is not None:
+        result["ort_sha256"] = ort_sha
+    return result
 
 
 def seal(ws: Path, binary: Path, model: Path, overrides: dict | None) -> dict:
