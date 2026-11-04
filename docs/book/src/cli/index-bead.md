@@ -16,7 +16,7 @@ bobbin index-bead <BEAD_ID> [PATH] [OPTIONS]
 
 `bobbin index --include-beads` is the batch path: it pulls every visible bead
 out of Dolt to work out which ones changed. That is fine on a schedule and far
-too expensive to run on every `bd update`. `index-bead` is the fast path for a
+too expensive to run after every tracker edit. `index-bead` is the fast path for a
 post-write trigger — it fetches one bead, re-embeds it only if its assembled
 content actually changed, and leaves the rest of the corpus alone.
 
