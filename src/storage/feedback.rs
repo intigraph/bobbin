@@ -4,7 +4,7 @@
 //! (useful/noise/harmful ratings) for tuning search quality.
 
 use anyhow::{Context, Result};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -324,6 +324,8 @@ impl FeedbackStore {
         self.conn
             .execute_batch("CREATE INDEX IF NOT EXISTS idx_feedback_iri ON feedback(iri);")?;
 
+        self.init_memory_usage()?;
+
         // Index for bundle/bead grouping queries
         self.conn.execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_injections_bundle ON injections(bundle_name);
@@ -447,26 +449,7 @@ impl FeedbackStore {
         injection_id: &str,
         items: &[crate::memory_recall::CitedItem],
     ) -> Result<()> {
-        if injection_id.is_empty() {
-            anyhow::bail!("injection_id is required");
-        }
-        let now = chrono::Utc::now()
-            .format("%Y-%m-%dT%H:%M:%S%.fZ")
-            .to_string();
-        self.conn.execute(
-            "INSERT OR IGNORE INTO injections (injection_id, timestamp) VALUES (?1, ?2)",
-            rusqlite::params![injection_id, now],
-        )?;
-        for it in items {
-            if !is_valid_item(&it.item) {
-                anyhow::bail!("invalid item id '{}' (expected m1..m5)", it.item);
-            }
-            self.conn.execute(
-                "INSERT OR REPLACE INTO injection_items (injection_id, item, iri, kind, natural_key, line) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![injection_id, it.item, it.iri, it.kind, it.natural_key, it.line],
-            )?;
-        }
-        Ok(())
+        self.store_citations(injection_id, items)
     }
 
     /// Cited items logged for an injection, in item order.
@@ -515,6 +498,22 @@ impl FeedbackStore {
             anyhow::bail!("Invalid rating 'used' without item: 'used' rates one cited memory item (item = m1..m5)");
         }
 
+        let tx = rusqlite::Transaction::new_unchecked(
+            &self.conn,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        if input.rating == "used" {
+            let existing: Option<i64> = tx.query_row(
+                "SELECT MIN(id) FROM feedback WHERE injection_id = ?1 AND item = ?2 AND agent = ?3 AND rating = 'used'",
+                rusqlite::params![input.injection_id, item, input.agent],
+                |row| row.get(0),
+            ).optional()?.flatten();
+            if let Some(id) = existing {
+                tx.commit()?;
+                return Ok(id);
+            }
+        }
+
         // Explicitly set timestamp — older DB schemas may lack DEFAULT clauses.
         let now = chrono::Utc::now()
             .format("%Y-%m-%dT%H:%M:%S%.fZ")
@@ -522,7 +521,7 @@ impl FeedbackStore {
 
         // Ensure the injection_id exists in the injections table (auto-create if needed).
         // Include timestamp explicitly for older schemas where it's NOT NULL without DEFAULT.
-        self.conn.execute(
+        tx.execute(
             "INSERT OR IGNORE INTO injections (injection_id, timestamp) VALUES (?1, ?2)",
             rusqlite::params![input.injection_id, now],
         )?;
@@ -530,23 +529,24 @@ impl FeedbackStore {
         // Resolve (injection_id, item) to the entity it cited. An item the
         // injection never logged is kept (the rating still counts) with no IRI.
         let iri: Option<String> = match item {
-            Some(item) => self
-                .conn
+            Some(item) => tx
                 .query_row(
                     "SELECT iri FROM injection_items WHERE injection_id = ?1 AND item = ?2",
                     rusqlite::params![input.injection_id, item],
                     |row| row.get(0),
                 )
-                .ok(),
+                .optional()?,
             None => None,
         };
 
-        self.conn.execute(
+        tx.execute(
             "INSERT INTO feedback (injection_id, timestamp, agent, rating, reason, item, iri) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             rusqlite::params![input.injection_id, now, input.agent, input.rating, input.reason, item, iri],
         )?;
 
-        Ok(self.conn.last_insert_rowid())
+        let id = tx.last_insert_rowid();
+        tx.commit()?;
+        Ok(id)
     }
 
     /// List feedback records with optional filters.
@@ -673,39 +673,6 @@ impl FeedbackStore {
             unactioned,
             lineage_records,
         })
-    }
-
-    /// Per-entity usage of cited memory items, most injected first.
-    pub fn entity_usage(&self, limit: usize) -> Result<Vec<EntityUsage>> {
-        let mut stmt = self.conn.prepare(
-            r#"SELECT ii.iri,
-                      COALESCE(MAX(ii.kind), ''),
-                      COUNT(DISTINCT ii.injection_id || '/' || ii.item),
-                      COUNT(DISTINCT CASE WHEN f.rating = 'used' THEN f.id END),
-                      COUNT(DISTINCT CASE WHEN f.rating = 'useful' THEN f.id END),
-                      COUNT(DISTINCT CASE WHEN f.rating = 'noise' THEN f.id END),
-                      COUNT(DISTINCT CASE WHEN f.rating = 'harmful' THEN f.id END),
-                      MAX(CASE WHEN f.rating = 'used' THEN f.timestamp END)
-               FROM injection_items ii
-               LEFT JOIN feedback f
-                 ON f.injection_id = ii.injection_id AND f.item = ii.item
-               GROUP BY ii.iri
-               ORDER BY 3 DESC, 4 DESC, ii.iri
-               LIMIT ?1"#,
-        )?;
-        let rows = stmt.query_map([limit as i64], |row| {
-            Ok(EntityUsage {
-                iri: row.get(0)?,
-                kind: row.get(1)?,
-                injected: row.get::<_, i64>(2)? as u64,
-                used: row.get::<_, i64>(3)? as u64,
-                useful: row.get::<_, i64>(4)? as u64,
-                noise: row.get::<_, i64>(5)? as u64,
-                harmful: row.get::<_, i64>(6)? as u64,
-                last_used: row.get(7)?,
-            })
-        })?;
-        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
     /// Get feedback statistics grouped by bundle name.
@@ -1085,3 +1052,6 @@ impl FeedbackStore {
 #[cfg(test)]
 #[path = "feedback_tests.rs"]
 mod tests;
+
+#[path = "feedback_usage.rs"]
+mod usage;
