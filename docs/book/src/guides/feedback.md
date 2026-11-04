@@ -62,6 +62,55 @@ pin = true     # Always include if budget allows
 boost = -0.3   # Demote frequently-noisy files
 ```
 
+## Memory citations and review dates
+
+Memory recall uses the same `injection_id` as code context. Cite the printed
+`m1`–`m5` item with the existing `feedback_submit` tool, HTTP endpoint, or CLI:
+
+```sh
+bobbin feedback submit --injection inj-example --item m1 --rating used --agent example
+bobbin feedback stats
+```
+
+`used` means the agent acted on that evidence; injection alone is not use.
+Replaying `used` for the same injection, item and agent returns the original
+receipt without refreshing its time. A new injection can record another use.
+Citation mappings are immutable, and unresolved feedback is never reassigned
+when a citation is logged later. Per-entity statistics use the IRI captured in
+the receipt. Historical duplicate receipts remain available but count once per
+use in entity statistics. Their latest recorded use time is retained: old
+duplicates cannot reliably distinguish a replay from a later genuine use.
+
+With the `knowledge` feature, maintenance can bring an unused entity's
+`reviewAfter` forward to now:
+
+```sh
+# arming: agent-invoked; review-due installs no schedule
+bobbin feedback review-due --endpoint https://graph.example
+bobbin feedback review-due --endpoint https://graph.example --apply --limit 20
+```
+
+Preview is the default. The command requires a fresh memory mirror for that
+endpoint and the authoritative local feedback database; `--server` is refused.
+It records when each mirror entity was first observed, including entities never
+injected. Only entities observed locally for at least 90 days with no recorded
+use in the last 90 days qualify. A new database or migration starts observation
+now, regardless of the age of existing records. These are local usage counts,
+not proof that nobody used the entity in another database.
+
+Apply uses the normal Quipu credential and a conditional update in the entity's
+existing source graph. It checks the exact version and previous review date,
+never postpones an already-due review, and requires both a transaction receipt
+and readback before reporting success. Refusals and uncertain outcomes stop the
+command; verify the graph before retrying an uncertain write. Verified changes
+update only the cached review date, preserving the mirror cursor and refresh
+time. Expired records, unknown planes and invalid metadata are not repaired by
+this command. No promotion, new memory version or review event is produced.
+
+This maintenance is agent-invoked; it installs no schedule and makes no Quipu
+calls from the per-prompt recall path. The graph's review consumer remains
+responsible for turning due dates into reviews.
+
 ## HTTP API
 
 | Endpoint | Method | Description |
