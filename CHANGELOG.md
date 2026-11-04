@@ -21,6 +21,13 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.34.0](https://github.com/intigraph/bobbin/compare/v0.33.0...v0.34.0) (2026-11-04)
+
+
+### Features
+
+* **share:** publish pendant entities under w3id.org/intigraph names ([#228](https://github.com/intigraph/bobbin/issues/228)) ([3a45dcb](https://github.com/intigraph/bobbin/commit/3a45dcba1bec768dd2e8e1adbb84469f4a8b64a7))
+
 ## [0.33.0](https://github.com/intigraph/bobbin/compare/v0.32.0...v0.33.0) (2026-11-02)
 
 
