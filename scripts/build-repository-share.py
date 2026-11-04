@@ -298,6 +298,47 @@ def verify_carried_alignments(stage, alignments):
         raise ValueError("native share did not carry the reviewed alignments")
 
 
+FORMER_NAME_LEGACY = "http://aegis.gastown.local/ontology/"
+
+
+def former_name(public):
+    """The exact name the release query renamed ``public`` from, or None."""
+    match = re.fullmatch(r"https://w3id\.org/intigraph/([A-Za-z0-9-]+)/id/(.+)", public)
+    if not match:
+        return None
+    owner, rest = match.groups()
+    kind, _, tail = rest.partition("/")
+    if kind in ("code", "doc", "chunk") and tail:
+        return f"{FORMER_NAME_LEGACY}{kind}/{owner}/{tail}"
+    if rest == "repo":
+        return f"{FORMER_NAME_LEGACY}repo_{owner}"
+    if owner == "quipu" and kind == "idea" and tail:
+        return "https://quipu.dev/knowledge/" + tail
+    if owner == "stack" and rest == "repo-embedded-knowledge-databases-directive-2026-09-03":
+        return FORMER_NAME_LEGACY + rest
+    return None
+
+
+def verify_former_names(export):
+    """Admit owl:sameAs only from a public name to its exact former name."""
+    same_as = "<http://www.w3.org/2002/07/owl#sameAs>"
+    linked = set()
+    for line in Path(export).read_text().splitlines():
+        parts = line.split(" ", 2)
+        if len(parts) < 3 or parts[1] != same_as:
+            continue
+        subject, value = parts[0], parts[2].rstrip(" .")
+        if not (subject.startswith("<") and value.startswith("<")):
+            raise ValueError("owl:sameAs between non-IRIs")
+        expected = former_name(subject[1:-1])
+        if expected is None or value[1:-1] != expected:
+            raise ValueError(f"owl:sameAs is not a former-name link: {subject} {value}")
+        if subject in linked:
+            raise ValueError(f"more than one former name: {subject}")
+        linked.add(subject)
+    return len(linked)
+
+
 def build(revision, source, tooling, binary, bobbin, output):
     repository = "scbrown/bobbin"
     source, tooling, output = map(Path, (source, tooling, output))
@@ -480,6 +521,7 @@ aegis:repo-embedded-knowledge-databases-directive-2026-09-03 a aegis:Directive ;
         or (stage / "shapes.ttl").stat().st_size == 0
     ):
         raise ValueError("repository share omitted receiver shapes")
+    verify_former_names(stage / "export.nt")
     receiver = private / "receiver.db"
     run(
         [
