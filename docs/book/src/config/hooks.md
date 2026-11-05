@@ -48,7 +48,7 @@ Skip injection entirely for prompts that start with operational commands:
 [hooks]
 skip_prefixes = [
     "git ", "git push", "git pull", "git status",
-    "bd ready", "bd list", "bd show", "bd close",
+    "sd ready", "sd list", "sd show", "sd close",
     "gt hook", "gt mail", "gt handoff", "gt prime",
     "cargo check", "cargo build", "cargo test",
     "go test", "go build", "go vet",
@@ -72,8 +72,8 @@ keywords = ["bobbin", "search index", "embedding", "context injection"]
 repos = ["bobbin"]
 
 [[hooks.keyword_repos]]
-keywords = ["beads", "bd ", "issue tracking"]
-repos = ["beads"]
+keywords = ["seeds", "sd ", "issue tracking"]
+repos = ["seeds"]
 
 [[hooks.keyword_repos]]
 keywords = ["traefik", "reverse proxy", "TLS certificate"]
@@ -135,7 +135,7 @@ feedback_prompt_interval = 5
 
 # Skip operational commands
 skip_prefixes = [
-    "git ", "bd ", "gt ",
+    "git ", "sd ", "gt ",
     "cargo ", "go ", "npm ",
     "y", "n", "ok", "done",
 ]

@@ -367,3 +367,43 @@ def test_unknown_embedded_store_layout_refuses_without_source_change(bound):
         reuse.derive_no_coupling(ws, dest, binary, model)
     assert reuse.verify(ws, binary, model, None) == original
     assert not (dest / '.bobbin').exists()
+
+
+@pytest.mark.parametrize("change", ["unset", "relative", "symlink", "changed"])
+def test_dynamic_runtime_requires_exact_explicit_library(bound, monkeypatch, change):
+    ws, binary, model = bound
+    ort = ws.parent / "libonnxruntime.so"
+    ort.write_bytes(b"synthetic CPU runtime, never executed")
+    runtime = dict(reuse.SUPPORTED_RUNTIMES[reuse.digest(binary)])
+    runtime["ort_sha256"] = reuse.digest(ort)
+    monkeypatch.setitem(reuse.SUPPORTED_RUNTIMES, reuse.digest(binary), runtime)
+    monkeypatch.setenv("ORT_DYLIB_PATH", str(ort))
+    record = reuse.seal(ws, binary, model, None)
+    assert record["identity"]["ort_sha256"] == reuse.digest(ort)
+    if change == "unset":
+        monkeypatch.delenv("ORT_DYLIB_PATH")
+    elif change == "relative":
+        monkeypatch.setenv("ORT_DYLIB_PATH", ort.name)
+    elif change == "symlink":
+        link = ws.parent / "linked-runtime.so"
+        link.symlink_to(ort)
+        monkeypatch.setenv("ORT_DYLIB_PATH", str(link))
+    else:
+        ort.write_bytes(b"different runtime")
+    with pytest.raises(reuse.ReuseRefused):
+        reuse.verify(ws, binary, model, None)
+
+
+def test_dynamic_runtime_same_bytes_new_location_stays_valid(bound, monkeypatch):
+    ws, binary, model = bound
+    ort = ws.parent / "libonnxruntime.so"
+    ort.write_bytes(b"synthetic CPU runtime, never executed")
+    runtime = dict(reuse.SUPPORTED_RUNTIMES[reuse.digest(binary)])
+    runtime["ort_sha256"] = reuse.digest(ort)
+    monkeypatch.setitem(reuse.SUPPORTED_RUNTIMES, reuse.digest(binary), runtime)
+    monkeypatch.setenv("ORT_DYLIB_PATH", str(ort))
+    record = reuse.seal(ws, binary, model, None)
+    other = ws.parent / "same-runtime.so"
+    shutil.copy2(ort, other)
+    monkeypatch.setenv("ORT_DYLIB_PATH", str(other))
+    assert reuse.verify(ws, binary, model, None) == record

@@ -51,7 +51,7 @@ pub fn iri_segment_decode(encoded: &str) -> String {
 /// `parses_what_the_minters_mint` is the round trip that keeps that from
 /// recurring.
 ///
-/// Accepts the three file-keyed lanes and the suffix forms hank actually
+/// Accepts the three file-keyed lanes and the suffix forms yupana actually
 /// mints:
 ///
 /// ```text

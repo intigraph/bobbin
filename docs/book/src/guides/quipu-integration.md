@@ -220,5 +220,5 @@ once per server and disable further writes to that server for the current
 harness session, across new Bobbin processes. Without a stable harness session
 ID or writable session-state directory, the diagnostic names its process-only
 limit. Public reads remain available. Install the issued credential at the
-canonical path, run `caboodle doctor`, then start a new harness session (or restart
+canonical path, run `tambo doctor`, then start a new harness session (or restart
 a process without a session ID) to re-enable writes. Bobbin never rotates credentials or relaxes server authorization.

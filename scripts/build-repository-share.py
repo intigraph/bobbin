@@ -178,8 +178,34 @@ def indexed_labels(binary, database, subjects):
     return labels
 
 
+def is_tracked_alias(link, target, files):
+    """True when symlink ``link`` -> ``target`` names a tracked regular file.
+
+    Agent files such as CLAUDE.md -> AGENTS.md are aliases of a file the
+    release already carries. Absolute, escaping, dangling and chained links,
+    and links to directories, are not.
+    """
+    if not target or target.startswith("/"):
+        return False
+    parts = []
+    for part in (Path(link).parent / target).parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not parts:
+                return False
+            parts.pop()
+        else:
+            parts.append(part)
+    return bool(parts) and Path(*parts) in files
+
+
 def materialize_release(source, revision, destination):
-    """Index only exact tracked release bytes in a new private source tree."""
+    """Index only exact tracked release bytes in a new private source tree.
+
+    A tracked alias of a tracked regular file is skipped rather than copied, so
+    its target is indexed once; any other non-file member refuses.
+    """
     destination = Path(destination)
     destination.mkdir(mode=0o700)
     archive = subprocess.run(
@@ -188,13 +214,15 @@ def materialize_release(source, revision, destination):
         capture_output=True,
     ).stdout
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
-        for member in bundle.getmembers():
+        members = bundle.getmembers()
+        files = {Path(member.name) for member in members if member.isfile()}
+        for member in members:
             relative = Path(member.name)
-            if (
-                relative.is_absolute()
-                or ".." in relative.parts
-                or not (member.isfile() or member.isdir())
-            ):
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ValueError("unsupported tracked release member")
+            if member.issym() and is_tracked_alias(relative, member.linkname, files):
+                continue
+            if not (member.isfile() or member.isdir()):
                 raise ValueError("unsupported tracked release member")
             target = destination / relative
             if member.isdir():
@@ -270,6 +298,47 @@ def verify_carried_alignments(stage, alignments):
         raise ValueError("native share did not carry the reviewed alignments")
 
 
+FORMER_NAME_LEGACY = "http://aegis.gastown.local/ontology/"
+
+
+def former_name(public):
+    """The exact name the release query renamed ``public`` from, or None."""
+    match = re.fullmatch(r"https://w3id\.org/intigraph/([A-Za-z0-9-]+)/id/(.+)", public)
+    if not match:
+        return None
+    owner, rest = match.groups()
+    kind, _, tail = rest.partition("/")
+    if kind in ("code", "doc", "chunk") and tail:
+        return f"{FORMER_NAME_LEGACY}{kind}/{owner}/{tail}"
+    if rest == "repo":
+        return f"{FORMER_NAME_LEGACY}repo_{owner}"
+    if owner == "quipu" and kind == "idea" and tail:
+        return "https://quipu.dev/knowledge/" + tail
+    if owner == "stack" and rest == "repo-embedded-knowledge-databases-directive-2026-09-03":
+        return FORMER_NAME_LEGACY + rest
+    return None
+
+
+def verify_former_names(export):
+    """Admit owl:sameAs only from a public name to its exact former name."""
+    same_as = "<http://www.w3.org/2002/07/owl#sameAs>"
+    linked = set()
+    for line in Path(export).read_text().splitlines():
+        parts = line.split(" ", 2)
+        if len(parts) < 3 or parts[1] != same_as:
+            continue
+        subject, value = parts[0], parts[2].rstrip(" .")
+        if not (subject.startswith("<") and value.startswith("<")):
+            raise ValueError("owl:sameAs between non-IRIs")
+        expected = former_name(subject[1:-1])
+        if expected is None or value[1:-1] != expected:
+            raise ValueError(f"owl:sameAs is not a former-name link: {subject} {value}")
+        if subject in linked:
+            raise ValueError(f"more than one former name: {subject}")
+        linked.add(subject)
+    return len(linked)
+
+
 def build(revision, source, tooling, binary, bobbin, output):
     repository = "scbrown/bobbin"
     source, tooling, output = map(Path, (source, tooling, output))
@@ -290,6 +359,16 @@ def build(revision, source, tooling, binary, bobbin, output):
         raise ValueError("release lacks a supported public corpus positive control")
     private = output.parent / "build-private"
     private.mkdir(mode=0o700)
+    # The provider belongs to this private working directory, not ambient HOME.
+    import importlib.util
+
+    provider_spec = importlib.util.spec_from_file_location(
+        "repository_share_embedding", Path(__file__).with_name("repository_share_embedding.py")
+    )
+    provider_contract = importlib.util.module_from_spec(provider_spec)
+    provider_spec.loader.exec_module(provider_contract)
+    expected_provider = provider_contract.configure(private)
+
 
     def run(args, *, env=None):
         return command(args, env=env, cwd=private)
@@ -321,6 +400,7 @@ entities = false
 model = "all-MiniLM-L6-v2"
 batch_size = 64
 """)
+    provider_contract.configure_indexer(index, private, expected_provider)
     env = isolated_environment(private)
     run(
         [
@@ -452,6 +532,8 @@ aegis:repo-embedded-knowledge-databases-directive-2026-09-03 a aegis:Directive ;
         or (stage / "shapes.ttl").stat().st_size == 0
     ):
         raise ValueError("repository share omitted receiver shapes")
+    provider_contract.verify_manifest(stage, expected_provider)
+    verify_former_names(stage / "export.nt")
     receiver = private / "receiver.db"
     run(
         [

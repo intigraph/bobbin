@@ -26,6 +26,14 @@ build:
 test:
     cargo test {{cargo_flags}} {{cargo_features}}
 
+# Optional real Quipu protocol fixture; point both variables at installed tools.
+test-memory-review:
+    cargo test {{cargo_flags}} {{cargo_features}} --bin bobbin cli::feedback::review::tests:: -- --include-ignored
+
+# Before/after library demonstration using the actual feedback source revisions.
+memory-usage-demo before after="working":
+    python3 docs/demos/memory-usage/reproduce.py --before {{quote(before)}} --after {{quote(after)}}
+
 # The eval framework's Python tests. Deliberately NOT folded into `just test`:
 # they need pytest and matplotlib, which a Rust contributor has no reason to
 # have, and a `just test` that fails on a missing python package trains people

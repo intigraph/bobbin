@@ -49,4 +49,12 @@ a:BobbinMappingRecordProfile a sh:NodeShape ;
 a:BobbinNoHandAuthoredIdentity a sh:NodeShape ;
     sh:targetSubjectsOf owl:sameAs ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
-    sh:property [ sh:path owl:sameAs ; sh:maxCount 0 ; ] .
+    # aegis-ro425e.18: the release query links each renamed entity to its
+    # former name. Only a public w3id entity name may carry one such link, to
+    # an IRI under a legacy prefix; the build refuses any link that is not the
+    # subject's exact former name (verify_former_names). Every other identity
+    # knot stays refused here.
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https://w3id[.]org/intigraph/[A-Za-z0-9-]+/id/" ;
+    sh:property [ sh:path owl:sameAs ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:pattern "^(http://aegis[.]gastown[.]local/ontology/|https://quipu[.]dev/knowledge/)" ; ] .

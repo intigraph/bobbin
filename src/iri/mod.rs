@@ -14,10 +14,10 @@
 //! store it has **0 live instances**, and it appears nowhere in the hourly
 //! ingest cron.
 //!
-//! The live producer is **hank** (`hank-src/src/export.rs:513-575`), which
+//! The live producer is **yupana** (`yupana-src/src/export.rs:513-575`), which
 //! `~/.local/lib/aegis/quipu-ingest-cron.sh:22` runs via `code-promote.sh`, and
 //! which minted all **10,433** live code entities. This module now reproduces
-//! hank's scheme so a bobbin entity and a hank entity for the same symbol are
+//! yupana's scheme so a bobbin entity and a yupana entity for the same symbol are
 //! ONE node:
 //!
 //! ```text
@@ -30,14 +30,14 @@
 //! `-L{line}` is not merely the other lane's spelling — it is unstable. A
 //! symbol's identity must survive edits ELSEWHERE in its file, and with a line
 //! suffix, inserting one line above a function re-mints it on the next reindex
-//! and orphans the old node. hank keeps same-named symbols apart with a scope
+//! and orphans the old node. yupana keeps same-named symbols apart with a scope
 //! chain (`{module}::Foo::bar`) for exactly this reason (aegis-1q14: without
 //! it, 42 same-kind collisions merged and unioned different symbols' call
 //! edges).
 //!
-//! KNOWN, DELIBERATE GAP — bobbin cannot mint hank's scope chain. `Chunk`
+//! KNOWN, DELIBERATE GAP — bobbin cannot mint yupana's scope chain. `Chunk`
 //! carries `name` and no enclosing scope, so a method is `{module}::bar` here
-//! and `{module}::Foo::bar` in hank. That is a MISS (two nodes), never a false
+//! and `{module}::Foo::bar` in yupana. That is a MISS (two nodes), never a false
 //! merge, and two same-named symbols in one bobbin file collapse to one node.
 //! Under-merging is the safe direction and it is a strict improvement on the
 //! 0-of-10,433 overlap the superseded lane produced. Closing it needs the
@@ -49,17 +49,17 @@
 /// Vocabulary namespace (`bobbin:name`, `bobbin:Chunk`, …).
 pub const ONTOLOGY_NS: &str = "http://aegis.gastown.local/ontology/";
 
-/// Entity namespace for code module/symbol IRIs (hank `export.rs:513`).
+/// Entity namespace for code module/symbol IRIs (yupana `export.rs:513`).
 pub const CODE_BASE: &str = "http://aegis.gastown.local/ontology/code/";
 
-/// Entity namespace for document/section IRIs (hank `export.rs:575`).
+/// Entity namespace for document/section IRIs (yupana `export.rs:575`).
 pub const DOC_BASE: &str = "http://aegis.gastown.local/ontology/doc/";
 
 /// Entity namespace for `bobbin:Chunk` spans.
 ///
 /// A distinct top-level lane on purpose. Chunks are bobbin's own referent — a
 /// retrieval SPAN, which ian ratified as genuinely not a `CodeSymbol` — and
-/// hank mints nothing chunk-shaped, so there is no contract to match. Hanging
+/// yupana mints nothing chunk-shaped, so there is no contract to match. Hanging
 /// them off the code lane instead (`{module}/C{line}`) would make a contract
 /// reader parse a chunk as a CodeModule whose path ends in `/C12`, which is
 /// the silent-misparse failure this whole bead is about.
@@ -72,13 +72,13 @@ pub const CHUNK_BASE: &str = "http://aegis.gastown.local/ontology/chunk/";
 /// (what this used to build) reads as exactly that.
 pub const INFERRED_BASE: &str = "http://aegis.gastown.local/ontology/inferred/";
 
-/// Percent-encode one IRI segment, matching hank's `export.rs::iri_segment`.
+/// Percent-encode one IRI segment, matching yupana's `export.rs::iri_segment`.
 ///
 /// `%` first so the encoding is injective (two different raw segments can
 /// never encode to the same text). `[` and `]` are gen-delims reserved for
 /// IPv6 literals in the authority and are ILLEGAL in a path segment, so one
 /// raw bracket makes the whole Turtle document unparseable, not just its own
-/// triple — hank measured that as 55 failed promote runs over 12 days
+/// triple — yupana measured that as 55 failed promote runs over 12 days
 /// (aegis-r5xta), every offender a JavaScript computed method name like
 /// `[Symbol.iterator]` in vendored minified bundles. bobbin indexes those
 /// same bundles.
@@ -108,13 +108,13 @@ pub fn iri_segment(raw: &str) -> String {
 
 /// Encode a relative path into ONE opaque IRI segment.
 ///
-/// hank's `module_iri`/`document_iri` escape `/` and nothing else. We escape
+/// yupana's `module_iri`/`document_iri` escape `/` and nothing else. We escape
 /// `/` and then apply [`iri_segment`]. For every path without IRI-hostile
-/// characters — effectively all of them — this is byte-identical to hank, so
-/// identities merge. For a path containing a space or a bracket, hank emits an
+/// characters — effectively all of them — this is byte-identical to yupana, so
+/// identities merge. For a path containing a space or a bracket, yupana emits an
 /// INVALID IRI and its promote fails on the whole document (the aegis-r5xta
 /// shape, one level up from symbol names); we emit a valid one. That can only
-/// differ from hank on files hank cannot currently emit at all, so it costs no
+/// differ from yupana on files yupana cannot currently emit at all, so it costs no
 /// merge and avoids inheriting the bug. The divergence is reported upstream
 /// rather than silently absorbed.
 pub fn path_segment(rel: &str) -> String {
@@ -127,7 +127,7 @@ pub fn path_segment(rel: &str) -> String {
 /// Percent-encode a path into one opaque IRI segment.
 ///
 /// Retained for bobbin-private lanes (file-coupling, quarantine) whose IRIs
-/// merge with nothing in hank. Prefer [`path_segment`] / [`iri_segment`] for
+/// merge with nothing in yupana. Prefer [`path_segment`] / [`iri_segment`] for
 /// anything on the shared code or doc lanes.
 pub fn iri_encode(s: &str) -> String {
     s.replace('%', "%25")
@@ -140,7 +140,7 @@ pub fn iri_encode(s: &str) -> String {
         .replace('}', "%7D")
 }
 
-/// GitHub-style anchor slug, matching hank's `docref.rs::slugify`: lowercase,
+/// GitHub-style anchor slug, matching yupana's `docref.rs::slugify`: lowercase,
 /// spaces/underscores/dashes collapse to one `-`, other punctuation dropped,
 /// leading and trailing dashes trimmed.
 pub fn slugify(heading: &str) -> String {
@@ -168,10 +168,10 @@ pub fn code_module_iri(repo: &str, path: &str) -> String {
     format!("{CODE_BASE}{}/{}", iri_segment(repo), path_segment(path))
 }
 
-/// IRI for a symbol: hank's `{module}::{name}` idiom.
+/// IRI for a symbol: yupana's `{module}::{name}` idiom.
 ///
 /// bobbin has no enclosing-scope chain to insert (see the module docs), so
-/// this is the single-segment case of hank's `{module}::{scope}::{name}`.
+/// this is the single-segment case of yupana's `{module}::{scope}::{name}`.
 pub fn symbol_iri(repo: &str, path: &str, name: &str) -> String {
     format!("{}::{}", code_module_iri(repo, path), iri_segment(name))
 }
@@ -181,7 +181,7 @@ pub fn document_iri(repo: &str, path: &str) -> String {
     format!("{DOC_BASE}{}/{}", iri_segment(repo), path_segment(path))
 }
 
-/// IRI for a document section: hank's `{document}#{slug}` idiom.
+/// IRI for a document section: yupana's `{document}#{slug}` idiom.
 ///
 /// bobbin carries a section's BREADCRUMB in `name` (`Guide > Setup`) while the
 /// live lane anchors on the slug of the heading itself, so the leaf is taken
@@ -223,7 +223,7 @@ pub use parse::{code_module_prefix_of, entity_iri_file_path};
 mod tests {
     use super::*;
 
-    /// The shapes below are transcribed from hank `src/export.rs` and from
+    /// The shapes below are transcribed from yupana `src/export.rs` and from
     /// LIVE IRIs read back off the deployed store on 2026-08-24 — deliberately
     /// as literal strings rather than by calling our own constructors, so this
     /// asserts agreement with the producer instead of self-consistency.
