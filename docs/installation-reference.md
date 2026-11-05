@@ -5,7 +5,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license"/></a>
   <a href="https://github.com/scbrown/bobbin/actions/workflows/ci.yml"><img src="https://github.com/scbrown/bobbin/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <a href="https://github.com/scbrown/caboodle"><img src="https://img.shields.io/badge/stack-quipu-8B5E3C.svg" alt="Quipu stack"/></a>
+  <a href="https://github.com/intigraph/tambo"><img src="https://img.shields.io/badge/stack-quipu-8B5E3C.svg" alt="Quipu stack"/></a>
 </p>
 
 [Watch the 60-second context and native hook recording](https://github.com/scbrown/bobbin/blob/main/docs/demos/injection-v0.27.3/README.md).
@@ -151,7 +151,7 @@ and source-build requirements, and [language support](https://scbrown.github.io/
 
 ## 🧺 The stack
 
-Caboodle installs these together and proves each one works; every tool also stands alone.
+Tambo installs these together and proves each one works; every tool also stands alone.
 
 ## Contributing
 
