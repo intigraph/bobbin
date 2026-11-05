@@ -151,7 +151,7 @@ and source-build requirements, and [language support](https://scbrown.github.io/
 
 ## 🧺 The stack
 
-Caboodle installs these together and proves each one works; every tool also stands alone.
+Tambo installs these together and proves each one works; every tool also stands alone.
 
 ## Contributing
 

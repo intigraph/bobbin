@@ -2378,14 +2378,14 @@ mod tests {
             ),
             Some("src/namespace.rs".to_string())
         );
-        // Symbol: hank's `::{name}` suffix is dropped (NOT `/name-L{line}`).
+        // Symbol: yupana's `::{name}` suffix is dropped (NOT `/name-L{line}`).
         assert_eq!(
             file_path_from_entity_iri(
                 "http://aegis.gastown.local/ontology/code/quipu/src%2Fstore%2Fops.rs::transact"
             ),
             Some("src/store/ops.rs".to_string())
         );
-        // Section: hank's `#{slug}` suffix is dropped (NOT `/S{line}`), on the
+        // Section: yupana's `#{slug}` suffix is dropped (NOT `/S{line}`), on the
         // doc lane where sections are actually minted.
         assert_eq!(
             file_path_from_entity_iri(

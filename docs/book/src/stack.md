@@ -9,12 +9,12 @@ category: appendix
 # The stack
 
 Bobbin supplies code search and budgeted context. Each tool below works on its
-own; [Caboodle](https://github.com/intigraph/tambo) can install them together
+own; [Tambo](https://github.com/intigraph/tambo) can install them together
 and check the resulting setup.
 
 | Tool | Role |
 |---|---|
-| [Caboodle](https://github.com/intigraph/tambo) | Installation and verification |
+| [Tambo](https://github.com/intigraph/tambo) | Installation and verification |
 | [Quipu](https://github.com/scbrown/quipu) | Governed knowledge graph |
 | [Camayoc](https://github.com/scbrown/camayoc) | Vocabulary and knowledge admission |
 | [Bobbin](https://github.com/scbrown/bobbin) | Repository search and context |

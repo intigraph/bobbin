@@ -121,17 +121,17 @@ pub(crate) fn generate_chunk_turtle(chunks: &[Chunk], edges: &[ChunkEdge], repo:
         };
 
         // A dual-typed chunk takes the identity of the entity it IS, so it
-        // merges with hank's node for the same symbol/section rather than
-        // forking beside it (aegis-6noan). That makes hank's collision
+        // merges with yupana's node for the same symbol/section rather than
+        // forking beside it (aegis-6noan). That makes yupana's collision
         // problem ours: bobbin has no scope chain, so two same-named symbols
         // in one file mint one IRI, and a second block would assert two
         // values for the maxCount-1 `name`/`symbolKind`/`chunkOrder`
-        // properties. hank keeps the first and drops the rest
+        // properties. yupana keeps the first and drops the rest
         // (`export.rs::dedupe_by_iri`); we keep the first and DEMOTE the rest
         // to the chunk lane, which loses no span — bobbin's product is the
         // span — and never asserts a conflicting value.
         //
-        // The demotion is not silent, for hank's reason: a quiet collapse
+        // The demotion is not silent, for yupana's reason: a quiet collapse
         // hides a genuine IRI collision exactly as well as it hides a benign
         // one, and the note travels with the payload that gets promoted AND
         // with the one that gets refused.
@@ -373,8 +373,8 @@ mod tests {
 
         // Durable IRIs on the LIVE lane (aegis-6noan): a NAMED section takes
         // the identity of the section it is — `doc/{repo}/{path}#{slug}` — so
-        // it merges with hank's node instead of forking beside it. The slug is
-        // of the LEAF heading, matching hank; `Intro > Setup` is a breadcrumb.
+        // it merges with yupana's node instead of forking beside it. The slug is
+        // of the LEAF heading, matching yupana; `Intro > Setup` is a breadcrumb.
         assert!(turtle.contains(
             "<http://aegis.gastown.local/ontology/doc/myrepo/docs%2Fguide.md#intro> \
              a bobbin:Chunk, bobbin:Section"
@@ -417,7 +417,7 @@ mod tests {
         ));
         assert!(turtle.contains("bobbin:repo \"repo\""));
         assert!(turtle.contains("bobbin:language \"rust\""));
-        // A dual-typed code chunk IS hank's CodeSymbol node: `{module}::{name}`.
+        // A dual-typed code chunk IS yupana's CodeSymbol node: `{module}::{name}`.
         assert!(turtle.contains(
             "<http://aegis.gastown.local/ontology/code/repo/src%2Flib.rs::parse> \
              a bobbin:Chunk, bobbin:CodeSymbol"

@@ -141,7 +141,7 @@ entities on a live store.
 > **superseded** ingest-repos.py lane, measured at 0 live instances, minted by
 > nothing in this repo — so the leg went on returning nothing, and its three
 > unit tests pinned that dead lane and stayed green over it. Fixed by parsing
-> `iri::CODE_BASE`/`DOC_BASE`/`CHUNK_BASE` with hank's real `::symbol` and
+> `iri::CODE_BASE`/`DOC_BASE`/`CHUNK_BASE` with yupana's real `::symbol` and
 > `#slug` suffixes, with the parser moved next to the minters in `src/iri.rs`
 > and a round-trip test (`parses_what_the_minters_mint`) composing the actual
 > constructors, so a fourth lane cannot pass. The lesson for the register: a
