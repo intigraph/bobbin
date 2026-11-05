@@ -142,7 +142,6 @@ Run `just check` and `just test` before submitting changes.
 
 [License](LICENSE).
 
-
 ### Repository pendant provider
 
 Repository pendant builders require explicitly pinned model and tokenizer bytes
