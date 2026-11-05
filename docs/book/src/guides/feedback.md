@@ -101,7 +101,7 @@ not proof that nobody used the entity in another database.
 Apply uses the normal Quipu credential and a conditional update in the entity's
 existing source graph. It checks the exact version and previous review date,
 never postpones an already-due review, and requires both a transaction receipt
-and readback before reporting success. Refusals and uncertain outcomes stop the
+and verification before reporting success. Refusals and uncertain outcomes stop the
 command; verify the graph before retrying an uncertain write. Verified changes
 update only the cached review date, preserving the mirror cursor and refresh
 time. Expired records, unknown planes and invalid metadata are not repaired by
