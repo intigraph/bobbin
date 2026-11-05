@@ -27,7 +27,7 @@ pub fn build_entities(chunks: &[Chunk], repo: &str) -> Vec<Entity> {
     for chunk in chunks.iter().filter(|c| c.start_line > 0) {
         if seen_files.insert(chunk.file_path.as_str()) {
             let is_doc = chunk.language == "markdown" || chunk.language == "pdf";
-            // Documents live on their own `doc/` lane in the live hank scheme,
+            // Documents live on their own `doc/` lane in the live yupana scheme,
             // not on `code/` with a different rdf:type (aegis-6noan).
             entities.push(Entity {
                 entity_iri: if is_doc {
@@ -115,7 +115,7 @@ mod tests {
         // The LIVE lane (aegis-6noan): symbols are `{module}::{name}` on the
         // `code/` base, sections are `{document}#{leaf-slug}` on `doc/`. The
         // local entities table and the quipu emitters share `crate::iri`, so
-        // a semantic hit here is the same identity hank's graph knows.
+        // a semantic hit here is the same identity yupana's graph knows.
         assert_eq!(
             entities[1].entity_iri,
             "http://aegis.gastown.local/ontology/code/myrepo/src%2Flib.rs::parse"

@@ -52,3 +52,6 @@ book/_build/
 
 # Quipu local databases and signing state are never repository source.
 /.quipu/
+
+# Legacy local tracker state stays private.
+/.beads/

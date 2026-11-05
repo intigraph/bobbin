@@ -6,7 +6,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-const FIX: &str = "checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token; install the issued token at ~/.config/quipu/token; run caboodle doctor";
+const FIX: &str = "checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token; install the issued token at ~/.config/quipu/token; run tambo doctor";
 static DISABLED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 fn key(endpoint: &str) -> String {
@@ -78,7 +78,7 @@ pub(crate) fn check(endpoint: &str) -> Result<()> {
         .map_err(|_| anyhow::anyhow!("Quipu auth circuit unavailable; writes skipped"))?;
     if disabled.contains(&key(endpoint)) || marker_path(endpoint).is_some_and(|path| path.exists())
     {
-        bail!("Quipu writes disabled for this session; run caboodle doctor and start a new session after repair");
+        bail!("Quipu writes disabled for this session; run tambo doctor and start a new session after repair");
     }
     Ok(())
 }
@@ -98,7 +98,7 @@ fn disable(endpoint: &str, why: &str) -> anyhow::Error {
             }
         }
     }
-    anyhow::anyhow!("Quipu writes disabled: credential {why}; run caboodle doctor")
+    anyhow::anyhow!("Quipu writes disabled: credential {why}; run tambo doctor")
 }
 
 pub(crate) fn rejected(endpoint: &str) -> anyhow::Error {

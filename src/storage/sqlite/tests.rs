@@ -225,7 +225,10 @@ fn test_same_path_in_two_repos_is_two_rows() {
         Some("hash_goldblum".to_string())
     );
     // And a repo that never wrote the path sees ABSENT, not another repo's hash.
-    assert!(store.get_file_hash("hank", "README.md").unwrap().is_none());
+    assert!(store
+        .get_file_hash("yupana", "README.md")
+        .unwrap()
+        .is_none());
 }
 
 #[test]
