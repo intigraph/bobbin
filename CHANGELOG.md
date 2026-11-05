@@ -21,6 +21,13 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.35.1](https://github.com/intigraph/bobbin/compare/v0.35.0...v0.35.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* use current stack names and remove tracked work state ([#235](https://github.com/intigraph/bobbin/issues/235)) ([80fd6d2](https://github.com/intigraph/bobbin/commit/80fd6d2fb88551a235b31338635bf420b205beb5))
+
 ## [0.35.0](https://github.com/intigraph/bobbin/compare/v0.34.0...v0.35.0) (2026-11-05)
 
 
