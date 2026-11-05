@@ -21,6 +21,18 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.35.0](https://github.com/intigraph/bobbin/compare/v0.34.0...v0.35.0) (2026-11-05)
+
+
+### Features
+
+* **feedback:** track cited use and preview idle memory reviews ([#231](https://github.com/intigraph/bobbin/issues/231)) ([4e785a5](https://github.com/intigraph/bobbin/commit/4e785a59f106da9bff97442c1fd4f764468661ad))
+
+
+### Bug Fixes
+
+* require pinned embedding providers in repository shares ([#234](https://github.com/intigraph/bobbin/issues/234)) ([cf46883](https://github.com/intigraph/bobbin/commit/cf468834f970fe735ccb0cd55da3837e3fa8b2d7))
+
 ## [0.34.0](https://github.com/intigraph/bobbin/compare/v0.33.0...v0.34.0) (2026-11-04)
 
 
