@@ -44,6 +44,8 @@ pub(super) struct SearchParams {
     exclude_tag: Option<String>,
     /// Scope search to a named context bundle
     bundle: Option<String>,
+    /// Include optional Quipu entity annotations (default true).
+    spotlight: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -328,11 +330,8 @@ pub(super) async fn search(
     let matched_bundles = find_matching_bundles(&state.tags_config, &params.q);
 
     // Call Quipu spotlight API if configured (non-blocking on failure)
-    let spotlight_annotations = if let Some(ref endpoint) = state.config.quipu_endpoint {
-        fetch_spotlight(endpoint, &params.q).await
-    } else {
-        vec![]
-    };
+    let spotlight_annotations =
+        optional_spotlight(state.config.quipu_endpoint.as_deref(), &params).await;
 
     Ok(Json(SearchResponse {
         query: params.q,
@@ -396,6 +395,13 @@ pub(super) async fn get_chunk(
 // Search helpers
 // ---------------------------------------------------------------------------
 
+async fn optional_spotlight(endpoint: Option<&str>, params: &SearchParams) -> Vec<SpotlightHit> {
+    match endpoint.filter(|_| params.spotlight.unwrap_or(true)) {
+        Some(endpoint) => fetch_spotlight(endpoint, &params.q).await,
+        None => vec![],
+    }
+}
+
 /// Call Quipu's spotlight API to get entity annotations for a query.
 /// Returns empty vec on any error (graceful degradation).
 async fn fetch_spotlight(endpoint: &str, query: &str) -> Vec<SpotlightHit> {
@@ -413,6 +419,7 @@ async fn fetch_spotlight(endpoint: &str, query: &str) -> Vec<SpotlightHit> {
 
     match client
         .post(&url)
+        .header("X-Quipu-Client", "bobbin-search")
         .json(&serde_json::json!({ "text": query, "confidence": 0.3 }))
         .send()
         .await
@@ -432,6 +439,10 @@ async fn fetch_spotlight(endpoint: &str, query: &str) -> Vec<SpotlightHit> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "search_spotlight_tests.rs"]
+mod spotlight_tests;
 
 fn to_search_item(r: &crate::types::SearchResult) -> SearchResultItem {
     SearchResultItem {

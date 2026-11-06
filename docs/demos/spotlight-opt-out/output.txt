@@ -1,0 +1,8 @@
+Candidate source on base f8786331; isolated query and mock-HTTP controls.
+Command: cargo test --locked -j2 --features knowledge --bin bobbin http::handlers::search::spotlight_tests
+
+running 2 tests
+test http::handlers::search::spotlight_tests::spotlight_query_option_is_explicit_and_defaults_to_enabled ... ok
+test http::handlers::search::spotlight_tests::opted_out_probe_makes_no_spotlight_request_but_default_calls_are_attributed ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1373 filtered out; finished in 0.02s

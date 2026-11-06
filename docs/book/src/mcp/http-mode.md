@@ -54,6 +54,7 @@ The server binds to `0.0.0.0` on the specified port and includes CORS headers fo
 | `type` | string | all | Filter by chunk type |
 | `limit` | integer | 10 | Maximum results |
 | `repo` | string | all | Filter by repository |
+| `spotlight` | bool | `true` | Include optional Quipu entity annotations. Set `false` for a search-only health probe; retrieval and hit validation still run. |
 
 ```bash
 curl "http://localhost:3030/search?q=error+handling&limit=5"
