@@ -21,6 +21,13 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.36.0](https://github.com/intigraph/bobbin/compare/v0.35.2...v0.36.0) (2026-11-06)
+
+
+### Features
+
+* **search:** allow opting out of spotlight annotations ([#238](https://github.com/intigraph/bobbin/issues/238)) ([74b0564](https://github.com/intigraph/bobbin/commit/74b0564cf504d0fe01cb0a54f77f55bbfcadbd96))
+
 ## [0.35.2](https://github.com/intigraph/bobbin/compare/v0.35.1...v0.35.2) (2026-11-05)
 
 
