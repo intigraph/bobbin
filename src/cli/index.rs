@@ -19,6 +19,11 @@ use crate::storage::{MetadataStore, VectorStore};
 use crate::types::{Chunk, ImportDependency, ImportEdge};
 
 mod args;
+mod batch;
+mod files;
+pub(crate) use files::collect_files;
+use files::process_batch;
+pub(crate) mod generation;
 pub use args::IndexArgs;
 mod maintenance;
 pub use maintenance::MaintenanceMode;
@@ -92,7 +97,7 @@ struct FileIndexResult {
     contexts: Vec<Option<String>>,
 }
 
-pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
+pub async fn run(mut args: IndexArgs, output: OutputConfig) -> Result<()> {
     let start_time = Instant::now();
 
     let repo_root = args
@@ -146,8 +151,56 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
             .unwrap_or("default")
     };
 
+    if args.generation_status {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&generation::Generation::status(&repo_root, repo_name)?)?
+        );
+        return Ok(());
+    }
+    let _writer = if args.start_generation.is_some() || args.resume_generation.is_some() {
+        generation::WriterLock::acquire(&repo_root)?
+    } else {
+        generation::WriterLock::ordinary(&repo_root)?
+    };
+    // Effective configuration is hashed, never persisted in plaintext (it may
+    // contain source credentials). Include every invocation-level source flag.
+    let identity = generation::identity(&(
+        &source_root,
+        repo_name,
+        &config,
+        args.include_beads,
+        &args.graph,
+        args.force_publish,
+        args.skip_calibrate,
+        format!("{:?}", args.maintenance),
+        args.maintenance_interval_hours,
+        cfg!(feature = "knowledge"),
+    ))?;
+    let mut generation = generation::Generation::open(
+        &repo_root,
+        repo_name,
+        identity,
+        args.start_generation.as_deref(),
+        args.resume_generation.as_deref(),
+    )?;
+    if let Some(g) = &generation {
+        if g.record.phase == generation::Phase::Complete {
+            println!("{}", serde_json::to_string_pretty(&g.record)?);
+            return Ok(());
+        }
+        args.force = true;
+    }
+
     let db_path = Config::db_path(&repo_root);
     let lance_path = Config::lance_path(&repo_root);
+    if generation.is_some() && config.archive.enabled {
+        for source in &config.archive.sources {
+            if source.path.is_empty() || !Path::new(&source.path).is_dir() {
+                bail!("generation archive source is unavailable: {}", source.name);
+            }
+        }
+    }
     let model_dir = Config::model_cache_dir()?;
 
     if output.verbose && !output.quiet && !output.json {
@@ -172,6 +225,10 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
 
     if let Some(stored) = stored_model {
         if stored != current_model {
+            if generation.is_some() {
+                bail!("model migration is not permitted inside a rebuild generation");
+            }
+
             if !output.quiet && !output.json {
                 println!(
                     "{} Embedding model changed from {} to {}. Re-indexing...",
@@ -214,12 +271,14 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
 
     // When forcing, delete all existing chunks for this repo first to prevent
     // unbounded LanceDB growth (each --force reindex was duplicating all data).
-    if args.force {
+    if let Some(g) = generation.as_mut() {
+        g.reset(&metadata_store, &vector_store, repo_name).await?;
+    } else if args.force {
         vector_store.delete_by_repo(repo_name).await?;
     }
 
     // Get existing indexed files from LanceDB (filtered by repo)
-    let existing_files: HashSet<String> = if args.force {
+    let existing_files: HashSet<String> = if args.force && generation.is_none() {
         HashSet::new()
     } else {
         vector_store
@@ -229,7 +288,7 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
             .collect()
     };
 
-    let files_to_index = collect_files(&source_root, &config)?;
+    let files_to_index = files::collect_files_strict(&source_root, &config, generation.is_some())?;
 
     if output.verbose && !output.quiet && !output.json {
         println!("  Found {} files matching patterns", files_to_index.len());
@@ -279,13 +338,14 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
 
     // When forcing, clear this repo's SQLite file hashes so everything gets
     // re-indexed (scoped: --force on one repo must not wipe the others').
-    if args.force {
+    if args.force && generation.is_none() {
         metadata_store.clear_file_hashes(repo_name)?;
     }
 
     // Filter files that need indexing (incremental by default)
     let mut files_needing_index = Vec::new();
     let mut skipped_count = 0usize;
+    let mut generation_unchanged = HashSet::new();
 
     for file_path in &files_to_index {
         let rel_path = file_path
@@ -294,14 +354,19 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
             .to_string_lossy()
             .to_string();
 
-        if !args.force {
+        if !args.force || generation.is_some() {
             // Unreadable (I/O or failed extraction): the indexing loop records it in
             // `errors` as under --force, instead of aborting the run (aegis-1v555n.1).
             if let Ok(content) = read_indexable_content(file_path, &config) {
                 let stored = metadata_store.get_file_hash(repo_name, &rel_path)?;
                 if stored.as_deref() == Some(compute_hash(&content).as_str()) {
                     skipped_count += 1;
-                    continue;
+                    if generation.is_none() {
+                        continue;
+                    }
+                    // Reparse for dependencies/entities/publication, but preserve
+                    // successful vector+hash batches across invocations.
+                    generation_unchanged.insert(rel_path.clone());
                 }
             }
         }
@@ -327,7 +392,8 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
     let archive_enabled = config.archive.enabled && !config.archive.sources.is_empty();
     let sql_enabled = config.sql.enabled && !config.sql.sources.is_empty();
 
-    if total_files == 0
+    if generation.is_none()
+        && total_files == 0
         && !commits_enabled
         && !include_beads
         && !archive_enabled
@@ -437,6 +503,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
         let content = match read_indexable_content(file_path, &config) {
             Ok(c) => c,
             Err(e) => {
+                if generation.is_some() {
+                    return Err(e.into());
+                }
                 errors.push((rel_path.clone(), e.to_string()));
                 if let Some(pb) = &progress {
                     pb.inc(1);
@@ -465,6 +534,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
         let mut chunks = match parser.parse_file(Path::new(&rel_path), &content) {
             Ok(c) => c,
             Err(e) => {
+                if generation.is_some() {
+                    return Err(e.into());
+                }
                 errors.push((rel_path.clone(), format!("Parse error: {}", e)));
                 if let Some(pb) = &progress {
                     pb.inc(1);
@@ -546,6 +618,10 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
             inferred_extraction.merge(inferred_extractor.extract(&chunks, repo_name));
         }
 
+        if generation_unchanged.contains(&rel_path) {
+            continue;
+        }
+
         // Compute contextual embeddings for enabled languages
         let t_ctx = Instant::now();
         let contexts = build_context_windows(&chunks, &content, &config.embedding.context);
@@ -560,29 +636,16 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
 
         let total_pending_chunks: usize = pending_results.iter().map(|r| r.chunks.len()).sum();
         if total_pending_chunks >= batch_size {
-            // Collect hashes before process_batch drains the results
-            let batch_hashes: Vec<(String, String)> = pending_results
-                .iter()
-                .map(|r| (r.path.clone(), r.hash.clone()))
-                .collect();
-
             let (indexed, chunks_count) = process_batch(
                 &mut pending_results,
                 &mut vector_store,
                 &embed,
                 repo_name,
                 &mut profile,
-                &existing_files,
+                &metadata_store,
                 &file_timestamps,
             )
             .await?;
-
-            // Update SQLite file hashes after successful indexing
-            let hash_refs: Vec<(&str, &str)> = batch_hashes
-                .iter()
-                .map(|(p, h)| (p.as_str(), h.as_str()))
-                .collect();
-            metadata_store.set_file_hashes_bulk(repo_name, &hash_refs)?;
 
             indexed_files += indexed;
             total_chunks += chunks_count;
@@ -601,27 +664,16 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
 
     // Process remaining files
     if !pending_results.is_empty() {
-        let batch_hashes: Vec<(String, String)> = pending_results
-            .iter()
-            .map(|r| (r.path.clone(), r.hash.clone()))
-            .collect();
-
         let (indexed, chunks_count) = process_batch(
             &mut pending_results,
             &mut vector_store,
             &embed,
             repo_name,
             &mut profile,
-            &existing_files,
+            &metadata_store,
             &file_timestamps,
         )
         .await?;
-
-        let hash_refs: Vec<(&str, &str)> = batch_hashes
-            .iter()
-            .map(|(p, h)| (p.as_str(), h.as_str()))
-            .collect();
-        metadata_store.set_file_hashes_bulk(repo_name, &hash_refs)?;
 
         indexed_files += indexed;
         total_chunks += chunks_count;
@@ -692,8 +744,10 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                             let mut count = 0;
                             metadata_store.begin_transaction()?;
                             for coupling in &couplings {
-                                if metadata_store.upsert_coupling(coupling).is_ok() {
-                                    count += 1;
+                                match metadata_store.upsert_coupling(coupling) {
+                                    Ok(()) => count += 1,
+                                    Err(e) if generation.is_some() => return Err(e),
+                                    Err(_) => {}
                                 }
                             }
                             metadata_store.commit()?;
@@ -726,6 +780,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                                         }
                                     }
                                     Err(e) => {
+                                        if generation.is_some() {
+                                            return Err(e.into());
+                                        }
                                         if !output.quiet && !output.json {
                                             println!(
                                                 "{} Failed to push coupling to Quipu: {}",
@@ -738,12 +795,16 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                             }
                         }
                         Err(e) => {
+                            if generation.is_some() {
+                                return Err(e.into());
+                            }
                             if !output.quiet && !output.json {
                                 println!("{} Failed to analyze git coupling: {}", "!".yellow(), e);
                             }
                         }
                     }
                 }
+                Err(e) if generation.is_some() => return Err(e),
                 Err(_) => {}
             }
         }
@@ -763,6 +824,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                 }
             }
             Err(e) => {
+                if generation.is_some() {
+                    return Err(e.into());
+                }
                 if !output.quiet && !output.json {
                     println!(
                         "{} Failed to compute cross-repo coupling: {}",
@@ -862,6 +926,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
             match embed.embed_batch(&texts).await {
                 Ok(embeddings) => {
                     if let Err(e) = vector_store.upsert_entities(&entities, &embeddings).await {
+                        if generation.is_some() {
+                            return Err(e);
+                        }
                         if !output.quiet && !output.json {
                             println!("{} Failed to store entities: {}", "!".yellow(), e);
                         }
@@ -870,6 +937,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                     }
                 }
                 Err(e) => {
+                    if generation.is_some() {
+                        return Err(e.into());
+                    }
                     if !output.quiet && !output.json {
                         println!("{} Failed to embed entities: {}", "!".yellow(), e);
                     }
@@ -919,6 +989,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                         }
                     }
                     Err(e) => {
+                        if generation.is_some() {
+                            return Err(e.into());
+                        }
                         if !output.quiet && !output.json {
                             println!("{} Mention reconcile skipped: {}", "!".yellow(), e);
                         }
@@ -947,6 +1020,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                 }
             }
             Err(e) => {
+                if generation.is_some() {
+                    return Err(e.into());
+                }
                 if !output.quiet && !output.json {
                     println!("{} Inferred quarantine push skipped: {:#}", "!".yellow(), e);
                 }
@@ -959,7 +1035,7 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
     // Index git commits as searchable chunks
     let t_commits = Instant::now();
     let mut commits_indexed: usize = 0;
-    if commits_enabled {
+    if commits_enabled && generation::needs(&generation, "commits") {
         if output.verbose && !output.quiet && !output.json {
             println!("  Indexing git commits...");
         }
@@ -969,19 +1045,24 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
         // (`last_indexed_commit:{repo}`), no removal sweep, watermark
         // persisted only after a successful insert. Chunk shape and the
         // `--force` replace behavior are unchanged from the bespoke block.
-        if let Ok(analyzer) = crate::index::git::GitAnalyzer::new(&source_root) {
+        let analyzer = crate::index::git::GitAnalyzer::new(&source_root);
+        if generation.is_some() && analyzer.is_err() {
+            bail!("generation commit source is unavailable");
+        }
+        if let Ok(analyzer) = analyzer {
             let source = crate::index::commits::CommitsSource::new(
                 analyzer,
                 repo_name,
                 config.git.commits_depth,
             );
 
-            match crate::index::source::index_watermark_source(
+            match crate::index::source::index_watermark_source_strict(
                 &source,
                 &mut vector_store,
                 &metadata_store,
                 &embed,
                 args.force,
+                generation.is_some(),
             )
             .await
             {
@@ -1023,6 +1104,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                     }
                 }
                 Err(e) => {
+                    if generation.is_some() {
+                        return Err(e.into());
+                    }
                     if !output.quiet && !output.json {
                         use crate::index::source::WatermarkSource;
                         println!("{} Failed to index {}: {}", "!".yellow(), source.name(), e);
@@ -1032,10 +1116,12 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
         }
     }
 
+    generation::finish(&mut generation, "commits")?;
+
     profile.git_commits_ms = t_commits.elapsed().as_millis();
 
     let mut beads_indexed: usize = 0;
-    if include_beads {
+    if include_beads && generation::needs(&generation, "beads") {
         if !output.quiet && !output.json {
             let src = beads::source_label(&config.beads);
             println!("  Indexing beads from {src}...");
@@ -1063,12 +1149,17 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
             }
         }
 
-        match crate::index::source::index_hashed_source(
+        if let Some(g) = generation.as_mut() {
+            g.reset_source(&metadata_store, &vector_store, BEADS_HASH_REPO)
+                .await?;
+        }
+        match crate::index::source::index_hashed_source_strict(
             &BeadsSource(beads_config),
             &mut vector_store,
             &metadata_store,
             &embed,
-            args.force,
+            args.force && generation.is_none(),
+            generation.is_some(),
         )
         .await
         {
@@ -1091,6 +1182,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                 }
             }
             Err(e) => {
+                if generation.is_some() {
+                    return Err(e.into());
+                }
                 if !output.quiet && !output.json {
                     println!("{} Failed to index beads: {}", "!".yellow(), e);
                 }
@@ -1098,32 +1192,48 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
         }
     }
 
+    generation::finish(&mut generation, "beads")?;
+
     // Index configured SQL sources (roadmap W4.P2) through the same seam.
     let mut sql_indexed: usize = 0;
     if config.sql.enabled && !config.sql.sources.is_empty() {
         for source_config in &config.sql.sources {
+            let stage = format!("sql:{}", source_config.name);
+            if !generation::needs(&generation, &stage) {
+                continue;
+            }
             if !output.quiet && !output.json {
                 println!("  Indexing SQL source '{}'...", source_config.name);
             }
             let source = match crate::index::sql::SqlSource::new(source_config) {
                 Ok(s) => s,
                 Err(e) => {
+                    if generation.is_some() {
+                        return Err(e.into());
+                    }
                     if !output.quiet && !output.json {
                         println!("{} {}", "!".yellow(), e);
                     }
                     continue;
                 }
             };
-            match crate::index::source::index_hashed_source(
+            if let Some(g) = generation.as_mut() {
+                use crate::index::source::ChunkSource;
+                g.reset_source(&metadata_store, &vector_store, source.repo_key())
+                    .await?;
+            }
+            match crate::index::source::index_hashed_source_strict(
                 &source,
                 &mut vector_store,
                 &metadata_store,
                 &embed,
-                args.force,
+                args.force && generation.is_none(),
+                generation.is_some(),
             )
             .await
             {
                 Ok(report) => {
+                    generation::finish(&mut generation, &stage)?;
                     sql_indexed += report.indexed;
                     if output.verbose && !output.quiet && !output.json {
                         println!(
@@ -1133,6 +1243,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                     }
                 }
                 Err(e) => {
+                    if generation.is_some() {
+                        return Err(e.into());
+                    }
                     if !output.quiet && !output.json {
                         println!(
                             "{} SQL source '{}' failed: {}",
@@ -1156,7 +1269,7 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
     // new under ARCHIVE_HASH_REPO, which re-embeds everything once and
     // deletes each old row by id before inserting its replacement).
     let mut archive_report: Option<crate::index::source::SourceIndexReport> = None;
-    if archive_enabled {
+    if archive_enabled && generation::needs(&generation, "archive") {
         if !output.quiet && !output.json {
             println!("  Indexing archives...");
         }
@@ -1178,12 +1291,17 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
         }
 
         let source = ArchiveSource(config.archive.clone());
-        match crate::index::source::index_hashed_source(
+        if let Some(g) = generation.as_mut() {
+            g.reset_source(&metadata_store, &vector_store, ARCHIVE_HASH_REPO)
+                .await?;
+        }
+        match crate::index::source::index_hashed_source_strict(
             &source,
             &mut vector_store,
             &metadata_store,
             &embed,
-            args.force,
+            args.force && generation.is_none(),
+            generation.is_some(),
         )
         .await
         {
@@ -1206,6 +1324,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                 archive_report = Some(report);
             }
             Err(e) => {
+                if generation.is_some() {
+                    return Err(e.into());
+                }
                 if !output.quiet && !output.json {
                     use crate::index::source::ChunkSource;
                     println!("{} Failed to index {}: {}", "!".yellow(), source.name(), e);
@@ -1213,6 +1334,7 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
             }
         }
     }
+    generation::finish(&mut generation, "archive")?;
     let archive_indexed = archive_report.as_ref().map_or(0, |r| r.indexed);
 
     let t_compact = Instant::now();
@@ -1262,6 +1384,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
     // anywhere an operator looks; a silent skip is what let the store grow for
     // months while the nightly "ran" every night.
     maintenance.warn_if_starved();
+    if generation.is_some() && maintenance.json_label().contains("skipped_lock_held") {
+        bail!("generation maintenance stage did not complete");
+    }
 
     let elapsed = start_time.elapsed();
 
@@ -1419,6 +1544,9 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
                 role: "default".to_string(),
             };
             if let Err(e) = super::calibrate::run(cal_args, cal_output).await {
+                if generation.is_some() {
+                    return Err(e);
+                }
                 if !output.quiet && !output.json {
                     eprintln!("  {} Auto-calibration failed: {}", "!".yellow(), e);
                 }
@@ -1428,186 +1556,16 @@ pub async fn run(args: IndexArgs, output: OutputConfig) -> Result<()> {
         }
     }
 
+    if let Some(g) = generation.as_mut() {
+        if !errors.is_empty() {
+            bail!("generation has file errors; completion refused");
+        }
+        g.complete()?;
+        if output.json {
+            eprintln!("generation receipt: {}", serde_json::to_string(&g.record)?);
+        }
+    }
     Ok(())
-}
-
-/// Collect all files to index based on configuration patterns
-pub(crate) fn collect_files(repo_root: &Path, config: &Config) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-
-    let mut include_globs: Vec<String> = config.index.include.clone();
-    if config.index.multimodal {
-        // Opt-in: also walk multimodal file types (PDFs) so the extractor can
-        // turn them into searchable text. Kept separate from the default
-        // include list so toggling the flag is the only knob users need.
-        for ext in crate::index::multimodal::MULTIMODAL_EXTENSIONS {
-            include_globs.push(format!("**/*.{ext}"));
-        }
-    }
-    if config.index.documents {
-        // Same opt-in shape as multimodal: toggling the flag is the only
-        // knob, no include-pattern editing required.
-        for ext in crate::index::documents::DOCUMENT_EXTENSIONS {
-            include_globs.push(format!("**/*.{ext}"));
-        }
-    }
-    let include_patterns: Vec<glob::Pattern> = include_globs
-        .iter()
-        .filter_map(|p| glob::Pattern::new(p).ok())
-        .collect();
-
-    let exclude_patterns: Vec<glob::Pattern> = config
-        .index
-        .exclude
-        .iter()
-        .filter_map(|p| glob::Pattern::new(p).ok())
-        .collect();
-
-    let mut builder = WalkBuilder::new(repo_root);
-    builder
-        .hidden(true)
-        .git_ignore(config.index.use_gitignore)
-        .git_global(config.index.use_gitignore)
-        .git_exclude(config.index.use_gitignore);
-
-    for entry in builder.build() {
-        let entry = match entry {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-
-        if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(true) {
-            continue;
-        }
-
-        let path = entry.path();
-        let rel_path = path
-            .strip_prefix(repo_root)
-            .unwrap_or(path)
-            .to_string_lossy();
-
-        let excluded = exclude_patterns.iter().any(|p| p.matches(&rel_path));
-        if excluded {
-            continue;
-        }
-
-        let included = include_patterns.iter().any(|p| p.matches(&rel_path));
-
-        if included {
-            files.push(path.to_path_buf());
-        }
-    }
-
-    Ok(files)
-}
-
-/// Process a batch of files: generate embeddings and store in LanceDB.
-///
-/// Collects all chunks across files into one big embedding batch to minimize
-/// ONNX session overhead, then splits results back to per-file for storage.
-async fn process_batch(
-    results: &mut Vec<FileIndexResult>,
-    vector_store: &mut VectorStore,
-    embed: &Embedder,
-    repo: &str,
-    profile: &mut ProfileStats,
-    existing_files: &HashSet<String>,
-    file_timestamps: &HashMap<String, i64>,
-) -> Result<(usize, usize)> {
-    if results.is_empty() {
-        return Ok((0, 0));
-    }
-
-    let fallback_ts = chrono::Utc::now().timestamp();
-
-    // Collect all embed texts across files into one batch
-    let mut all_texts: Vec<String> = Vec::new();
-    let mut file_chunk_counts: Vec<usize> = Vec::new();
-
-    for result in results.iter() {
-        let texts: Vec<String> = result
-            .contexts
-            .iter()
-            .zip(result.chunks.iter())
-            .map(|(ctx, chunk)| {
-                ctx.as_ref()
-                    .cloned()
-                    .unwrap_or_else(|| chunk.content.clone())
-            })
-            .collect();
-        file_chunk_counts.push(texts.len());
-        all_texts.extend(texts);
-    }
-
-    let all_refs: Vec<&str> = all_texts.iter().map(|s| s.as_str()).collect();
-
-    // Embed all chunks in one batch
-    let t_embed = Instant::now();
-    let (all_embeddings, embed_timing) = embed
-        .embed_batch_timed(&all_refs)
-        .await
-        .context("Failed to generate embeddings")?;
-    profile.embed_ms += t_embed.elapsed().as_millis();
-    profile.embed_tokenize_ms += embed_timing.tokenize_ms;
-    profile.embed_inference_ms += embed_timing.inference_ms;
-    profile.embed_pooling_ms += embed_timing.pooling_ms;
-    profile.total_chunks_embedded += all_refs.len();
-    profile.total_batches += 1;
-
-    // Batch-delete only files that already exist in the index
-    let t_del = Instant::now();
-    let file_paths: Vec<String> = results
-        .iter()
-        .map(|r| r.path.clone())
-        .filter(|p| existing_files.contains(p))
-        .collect();
-    if !file_paths.is_empty() {
-        vector_store.delete_by_file(&file_paths, Some(repo)).await?;
-    }
-    profile.delete_ms += t_del.elapsed().as_millis();
-
-    // Accumulate all chunks, embeddings, contexts, per-chunk file hashes,
-    // and per-chunk indexed_at timestamps for a single bulk Lance insert.
-    let mut all_chunks: Vec<Chunk> = Vec::new();
-    let mut all_contexts: Vec<Option<String>> = Vec::new();
-    let mut all_hashes: Vec<String> = Vec::new();
-    let mut all_indexed_at: Vec<String> = Vec::new();
-    let mut indexed_count = 0;
-    let mut chunks_count = 0;
-
-    for (result, &chunk_count) in results.drain(..).zip(file_chunk_counts.iter()) {
-        let ts = file_timestamps
-            .get(&result.path)
-            .copied()
-            .unwrap_or(fallback_ts)
-            .to_string();
-        for _ in 0..chunk_count {
-            all_hashes.push(result.hash.clone());
-            all_indexed_at.push(ts.clone());
-        }
-        all_chunks.extend(result.chunks);
-        all_contexts.extend(result.contexts);
-        chunks_count += chunk_count;
-        indexed_count += 1;
-    }
-
-    let t_ins = Instant::now();
-    let hash_refs: Vec<&str> = all_hashes.iter().map(|s| s.as_str()).collect();
-    let ts_refs: Vec<&str> = all_indexed_at.iter().map(|s| s.as_str()).collect();
-    vector_store
-        .insert_bulk(
-            &all_chunks,
-            &all_embeddings,
-            &all_contexts,
-            repo,
-            &hash_refs,
-            &ts_refs,
-        )
-        .await
-        .context("Failed to store chunks")?;
-    profile.insert_ms += t_ins.elapsed().as_millis();
-
-    Ok((indexed_count, chunks_count))
 }
 
 /// Build context windows for chunks based on contextual embedding config.

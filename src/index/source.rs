@@ -67,12 +67,25 @@ pub async fn index_hashed_source<S: ChunkSource>(
     embedder: &Embedder,
     force: bool,
 ) -> Result<SourceIndexReport> {
+    index_hashed_source_strict(source, vector_store, metadata_store, embedder, force, false).await
+}
+
+/// Strict source lifecycle for checkpointed generations. Ordinary callers retain
+/// their historical best-effort behavior; a generation must surface store errors.
+pub async fn index_hashed_source_strict<S: ChunkSource>(
+    source: &S,
+    vector_store: &mut VectorStore,
+    metadata_store: &MetadataStore,
+    embedder: &Embedder,
+    force: bool,
+    strict: bool,
+) -> Result<SourceIndexReport> {
     let chunks = source.fetch().await?;
     let repo_key = source.repo_key();
     let now = chrono::Utc::now().timestamp().to_string();
 
     if force {
-        metadata_store.clear_file_hashes(repo_key).ok();
+        require_if_strict(metadata_store.clear_file_hashes(repo_key), strict)?;
     }
 
     let mut to_index = Vec::new();
@@ -81,32 +94,38 @@ pub async fn index_hashed_source<S: ChunkSource>(
     for c in &chunks {
         current_paths.insert(c.file_path.clone());
         let h = content_hash(&c.content);
-        let unchanged = metadata_store
-            .get_file_hash(repo_key, &c.file_path)
-            .ok()
-            .flatten()
-            .as_deref()
-            == Some(h.as_str());
+        let stored = metadata_store.get_file_hash(repo_key, &c.file_path);
+        let stored = if strict {
+            stored?
+        } else {
+            stored.ok().flatten()
+        };
+        let unchanged = stored.as_deref() == Some(h.as_str());
         if !unchanged {
             to_index.push(c.clone());
         }
         new_hashes.push((c.file_path.clone(), h));
     }
 
-    let removed: Vec<String> = metadata_store
-        .get_all_indexed_files(repo_key)
-        .unwrap_or_default()
+    let indexed = metadata_store.get_all_indexed_files(repo_key);
+    let indexed = if strict {
+        indexed?
+    } else {
+        indexed.unwrap_or_default()
+    };
+    let removed: Vec<String> = indexed
         .into_iter()
         .filter(|p| !current_paths.contains(p))
         .collect();
     if !removed.is_empty() {
-        vector_store
-            .delete_by_file(&removed, Some(repo_key))
-            .await
-            .ok();
-        metadata_store
-            .delete_file_hashes(Some(repo_key), &removed)
-            .ok();
+        require_if_strict(
+            vector_store.delete_by_file(&removed, Some(repo_key)).await,
+            strict,
+        )?;
+        require_if_strict(
+            metadata_store.delete_file_hashes(Some(repo_key), &removed),
+            strict,
+        )?;
     }
 
     if to_index.is_empty() {
@@ -124,7 +143,7 @@ pub async fn index_hashed_source<S: ChunkSource>(
 
     // Replace just the changed chunks.
     let ids: Vec<String> = to_index.iter().map(|c| c.id.clone()).collect();
-    vector_store.delete(&ids).await.ok();
+    require_if_strict(vector_store.delete(&ids).await, strict)?;
     vector_store
         .insert(
             &to_index,
@@ -141,9 +160,10 @@ pub async fn index_hashed_source<S: ChunkSource>(
         .iter()
         .map(|(p, h)| (p.as_str(), h.as_str()))
         .collect();
-    metadata_store
-        .set_file_hashes_bulk(repo_key, &hash_refs)
-        .ok();
+    require_if_strict(
+        metadata_store.set_file_hashes_bulk(repo_key, &hash_refs),
+        strict,
+    )?;
 
     Ok(SourceIndexReport {
         indexed: to_index.len(),
@@ -198,6 +218,19 @@ pub async fn index_watermark_source<S: WatermarkSource>(
     embedder: &Embedder,
     force: bool,
 ) -> Result<usize> {
+    index_watermark_source_strict(source, vector_store, metadata_store, embedder, force, false)
+        .await
+}
+
+/// Watermark source with strict replacement error propagation for generations.
+pub async fn index_watermark_source_strict<S: WatermarkSource>(
+    source: &S,
+    vector_store: &mut VectorStore,
+    metadata_store: &MetadataStore,
+    embedder: &Embedder,
+    force: bool,
+    strict: bool,
+) -> Result<usize> {
     let stored = metadata_store.get_meta(&source.watermark_key())?;
     let since = if force { None } else { stored.as_deref() };
 
@@ -218,7 +251,7 @@ pub async fn index_watermark_source<S: WatermarkSource>(
     // A force pass refetches everything, so replace rather than duplicate.
     if force {
         let ids: Vec<String> = chunks.iter().map(|c| c.id.clone()).collect();
-        vector_store.delete(&ids).await.ok();
+        require_if_strict(vector_store.delete(&ids).await, strict)?;
     }
 
     vector_store
@@ -340,4 +373,12 @@ pub async fn index_hashed_item(
 pub fn content_hash(content: &str) -> String {
     use sha2::{Digest, Sha256};
     hex::encode(Sha256::digest(content.as_bytes()))
+}
+
+fn require_if_strict(result: Result<()>, strict: bool) -> Result<()> {
+    if strict {
+        result
+    } else {
+        Ok(())
+    }
 }

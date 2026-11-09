@@ -12,6 +12,47 @@ source_files: [src/cli/index.rs, src/cli/index_encoding.rs]
 
 # index
 
+## Forced rebuilds with durable progress
+
+Use an explicit producer generation when a forced rebuild may outlive one
+invocation:
+
+```bash
+bobbin index --start-generation rebuild-1 --repo example --source /path/to/source .
+bobbin index --generation-status --repo example .
+bobbin index --resume-generation rebuild-1 --repo example --source /path/to/source .
+```
+
+Starting a generation implies a forced rebuild. `ResetPending` is durable
+before either the repository's vector rows or file hashes are cleared. `Ready`
+is durable only after both resets succeed. A resumed `Ready` generation keeps
+committed file batches; orphan vectors from an interrupted batch are replaced
+before their hashes are committed. Unchanged files are still parsed to rebuild
+dependency and graph data without repeating their embeddings.
+
+The generation binds the canonical source path and effective configuration,
+including invocation source flags. Resume refuses a different identity. An
+explicit start with a different generation ID begins a new reset and records
+the superseded ID; it does not resume old progress. A model migration is refused
+inside a generation because the model metadata is shared by repositories.
+
+An OS advisory lock fences index and watch writers during generation work.
+Ordinary writers retain shared access when no generation is pending. Once a
+generation is pending, ordinary indexing refuses until the producer completes
+it or an explicit new generation takes its place. A competing generation fails
+instead of waiting indefinitely. Stop an ordinary watcher through its normal
+owner before requesting a generation; do not bypass its lock.
+
+Commits, beads, SQL and archives retain their configured force semantics and
+producer checkpoints. Source and storage errors prevent completion. `Complete`
+is persisted only after the remaining admitted work succeeds, with its real
+completion time. Resuming a completed ID returns that receipt without doing
+another reset; status reads do not open an embedding model or vector store.
+
+A wrapper must use this producer receipt, rather than infer reset safety from
+a timestamp or a process exit. Existing `--force` without a generation continues to reset on each run. Introducing these flags into a scheduled job requires the
+normal release and deployment review; no timeout increase is implied.
+
 Build or update the search index. Walks repository files, parses them with Tree-sitter (or pulldown-cmark for Markdown), generates embeddings, and stores everything in LanceDB.
 
 ## Usage

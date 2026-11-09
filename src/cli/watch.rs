@@ -67,6 +67,8 @@ pub async fn run(args: WatchArgs, output: OutputConfig) -> Result<()> {
         bail!("{}", super::not_initialized_error(&repo_root));
     }
 
+    let _writer = super::index::generation::WriterLock::ordinary(&repo_root)?;
+    super::index::generation::WriterLock::refuse_pending(&repo_root)?;
     let config = Config::load(&config_path)?;
 
     let source_root = if let Some(ref source) = args.source {
@@ -77,9 +79,7 @@ pub async fn run(args: WatchArgs, output: OutputConfig) -> Result<()> {
         repo_root.clone()
     };
 
-    // Repo name: explicit --repo > auto-detect from git root
-    // When --repo is set, ALL files use that repo name.
-    // Otherwise, each file's repo is detected from its git root per-file in reindex_files.
+    // Explicit --repo covers all files; otherwise reindex_files detects each git root.
     let explicit_repo = args.repo.clone();
     let detected_repo = if explicit_repo.is_none() {
         detect_git_repo_name(&source_root)
