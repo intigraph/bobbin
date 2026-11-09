@@ -12,7 +12,7 @@ source_files: [src/cli/index.rs, src/cli/index_encoding.rs]
 
 # index
 
-## Checkpointed forced rebuilds
+## Forced rebuilds with durable progress
 
 Use an explicit producer generation when a forced rebuild may outlive one
 invocation:
@@ -50,8 +50,7 @@ completion time. Resuming a completed ID returns that receipt without doing
 another reset; status reads do not open an embedding model or vector store.
 
 A wrapper must use this producer receipt, rather than infer reset safety from
-a timestamp or a process exit. Existing uncheckpointed `--force` remains
-uncheckpointed. Introducing these flags into a scheduled job requires the
+a timestamp or a process exit. Existing `--force` without a generation continues to reset on each run. Introducing these flags into a scheduled job requires the
 normal release and deployment review; no timeout increase is implied.
 
 Build or update the search index. Walks repository files, parses them with Tree-sitter (or pulldown-cmark for Markdown), generates embeddings, and stores everything in LanceDB.
