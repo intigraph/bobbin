@@ -165,21 +165,18 @@ pub async fn run(mut args: IndexArgs, output: OutputConfig) -> Result<()> {
     };
     // Effective configuration is hashed, never persisted in plaintext (it may
     // contain source credentials). Include every invocation-level source flag.
-    let identity = format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&(
-            &source_root,
-            repo_name,
-            &config,
-            args.include_beads,
-            &args.graph,
-            args.force_publish,
-            args.skip_calibrate,
-            format!("{:?}", args.maintenance),
-            args.maintenance_interval_hours,
-            cfg!(feature = "knowledge"),
-        ))?)
-    );
+    let identity = generation::identity(&(
+        &source_root,
+        repo_name,
+        &config,
+        args.include_beads,
+        &args.graph,
+        args.force_publish,
+        args.skip_calibrate,
+        format!("{:?}", args.maintenance),
+        args.maintenance_interval_hours,
+        cfg!(feature = "knowledge"),
+    ))?;
     let mut generation = generation::Generation::open(
         &repo_root,
         repo_name,

@@ -10,6 +10,14 @@ use std::path::{Path, PathBuf};
 
 use crate::storage::{MetadataStore, VectorStore};
 
+/// Hash semantic configuration, independent of HashMap iteration or JSON's
+/// preserve_order feature. Arrays retain their semantically significant order.
+pub(super) fn identity(input: &impl Serialize) -> Result<String> {
+    let mut value = serde_json::to_value(input)?;
+    value.sort_all_objects();
+    Ok(format!("{:x}", Sha256::digest(serde_json::to_vec(&value)?)))
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(super) enum Phase {
     ResetPending,
