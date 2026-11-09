@@ -14,6 +14,18 @@ pub struct IndexArgs {
     #[arg(long)]
     pub(in crate::cli) force: bool,
 
+    /// Start a named, producer-checkpointed forced rebuild (does not run implicitly).
+    #[arg(long, conflicts_with_all = ["resume_generation", "generation_status"])]
+    pub(in crate::cli) start_generation: Option<String>,
+
+    /// Resume the named rebuild with the identical effective source/configuration.
+    #[arg(long, conflicts_with = "generation_status")]
+    pub(in crate::cli) resume_generation: Option<String>,
+
+    /// Read the repo's producer checkpoint without opening the model or stores.
+    #[arg(long)]
+    pub(in crate::cli) generation_status: bool,
+
     /// Publish the full graph even if unchanged, without re-embedding files
     #[arg(long)]
     pub(in crate::cli) force_publish: bool,

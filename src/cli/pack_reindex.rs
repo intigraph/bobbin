@@ -17,6 +17,9 @@ pub(super) async fn run(
         index::IndexArgs {
             incremental: true,
             force: false,
+            start_generation: None,
+            resume_generation: None,
+            generation_status: false,
             force_publish: false,
             graph: None,
             repo: Some(repo),
