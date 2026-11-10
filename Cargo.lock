@@ -784,7 +784,7 @@ dependencies = [
 
 [[package]]
 name = "bobbin-ai"
-version = "0.36.0"
+version = "0.36.1"
 dependencies = [
  "anyhow",
  "arrow",
