@@ -683,3 +683,69 @@ jobs:
       - name: Require repository-owned trusted-host pendant
         if: steps.publisher.outputs.admitted == 'true'
         run: python3 scripts/verify-repository-share.py "$VERSION" "$(git rev-parse HEAD)"
+
+  # Tell scbrown/homebrew-tap that a release was published, so it regenerates
+  # formulas now instead of at its next hourly reconciliation (aegis-em2). The
+  # payload is informational: the tap still reads each repo's latest stable
+  # release. Fails closed without failing the release run: no token, a release
+  # that is missing, draft or prerelease, or any reply other than 204 means no
+  # notification. Inactive until HOMEBREW_TAP_DISPATCH_TOKEN is set (aegis-7q7b).
+  notify-tap:
+    name: Notify Homebrew tap
+    needs: [release-please, release]
+    if: >-
+      always() &&
+      github.event_name != 'pull_request' &&
+      needs.release.result == 'success' &&
+      (startsWith(github.ref, 'refs/tags/') ||
+       github.event_name == 'workflow_dispatch' ||
+       needs.release-please.outputs.releases_created == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      REPO: ${{ github.repository }}
+      TAG: ${{ inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || needs.release-please.outputs.tag_name }}
+      GH_TOKEN: ${{ github.token }}
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}
+    steps:
+      - name: Dispatch stack-release to scbrown/homebrew-tap
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "::warning title=Homebrew tap not notified::HOMEBREW_TAP_DISPATCH_TOKEN is not set (aegis-7q7b). The tap's hourly schedule will reconcile."
+            exit 0
+          fi
+          if [[ ! "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
+             [[ ! "$TAG" =~ ^([A-Za-z0-9]+-)*v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::warning title=Homebrew tap not notified::the release repository or tag is not well formed."
+            exit 0
+          fi
+          # Only a published, non-draft, non-prerelease release is announced.
+          if ! state="$(gh api "repos/$REPO/releases/tags/$TAG" --jq '"\(.draft) \(.prerelease)"')"; then
+            echo "::warning title=Homebrew tap not notified::could not read the release for $TAG."
+            exit 0
+          fi
+          if [ "$state" != "false false" ]; then
+            echo "Release $TAG is not a published stable release (draft prerelease: $state); not notifying."
+            exit 0
+          fi
+          body="$(jq -nc --arg repo "$REPO" --arg tag "$TAG" \
+            '{event_type: "stack-release", client_payload: {repo: $repo, tag: $tag}}')"
+          # Fixed URL, no redirects followed (no -L). The token reaches curl on
+          # stdin (--config -), never on a command line or in the log.
+          status="$(printf 'header = "Authorization: Bearer %s"\n' "$TAP_TOKEN" |
+            curl --config - --silent --show-error --fail --proto '=https' --max-time 30 \
+              --output /dev/null --write-out '%{http_code}' \
+              --request POST \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --data "$body" \
+              https://api.github.com/repos/scbrown/homebrew-tap/dispatches)" || true
+          if [ "$status" != 204 ]; then
+            echo "::warning title=Homebrew tap not notified::dispatch answered HTTP ${status:-none}, not 204. The tap's hourly schedule will reconcile."
+            exit 0
+          fi
+          echo "Notified scbrown/homebrew-tap: $REPO $TAG"
