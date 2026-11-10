@@ -21,6 +21,13 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.36.1](https://github.com/intigraph/bobbin/compare/v0.36.0...v0.36.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **index:** resume forced rebuilds through durable generations ([#240](https://github.com/intigraph/bobbin/issues/240)) ([ff55aaf](https://github.com/intigraph/bobbin/commit/ff55aaf6a233ae157d765a1668037862a289327b))
+
 ## [0.36.0](https://github.com/intigraph/bobbin/compare/v0.35.2...v0.36.0) (2026-11-06)
 
 
