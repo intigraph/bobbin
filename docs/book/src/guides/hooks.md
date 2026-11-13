@@ -492,3 +492,57 @@ bobbin hook status --json
 - [Searching](searching.md) — understand the search engine behind injection
 - [`hook` CLI reference](../cli/hook.md) — full subcommand reference
 - [Configuration Reference](../config/reference.md) — all `config.toml` settings
+
+## Scope prompt retrieval to groups
+
+Prompt retrieval can use named repository groups without removing repositories
+from the index or changing explicit searches. Global configuration is merged
+with the nearest project configuration. Project values override global values.
+
+```toml
+[[groups]]
+name = "engineering"
+repos = ["engine", "client"]
+
+[[groups]]
+name = "external"
+repos = ["example"]
+
+[hooks]
+search_group = "engineering"
+
+[hooks.roles]
+"crew/*" = ["engineering"]
+"crew/research" = ["external"]
+```
+
+The most specific matching role glob wins, using the same role identity as
+repository access filtering. An absent role match uses `search_group`. With
+neither setting, retrieval keeps its previous scope. A configured empty group
+or empty intersection skips injection; an unknown group refuses retrieval.
+Keyword repository hints intersect an explicit group and cannot widen it.
+Repository access rules remain independent and still apply.
+
+A harness may publish `bobbin_groups` on the current anchored plate:
+
+```json
+{"item":"work-1","at":1700000000,"bobbin_groups":["engineering"]}
+```
+
+A fresh, matching plate overrides the role group. Shantytown publishes these
+names from `bobbin-group:<name>` item labels when it already has the item row;
+ID-only dispatches omit unknown metadata until the next anchor refresh. Bobbin
+never queries the tracker on prompt submission. Missing, stale, malformed or
+mismatched task metadata falls back to the role group. Group names are bounded
+and must refer to configured groups.
+
+The scope applies to local assembly, remote context, and remote search fallback.
+Results without repository provenance are omitted when a scope is explicit.
+Unscoped bundle expansion and complementary expansion are disabled for scoped
+injections so they cannot reintroduce excluded repositories. Explicit search
+and bundle commands remain available.
+
+Injection telemetry includes `retrieval_scope` and `file_provenance` with
+repository, file and chunk keys for subsequent relevance audits. Historical
+records without these fields cannot establish per-repository relevance or
+usage. A missing rating is unknown, rather than a negative rating.

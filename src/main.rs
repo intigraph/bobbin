@@ -9,6 +9,7 @@ mod commands;
 pub mod config;
 mod errors;
 mod gpu_runtime;
+mod hook_scope;
 mod http;
 mod index;
 mod iri;

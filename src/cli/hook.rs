@@ -16,6 +16,9 @@ use crate::storage::{MetadataStore, VectorStore};
 mod breadcrumb_triggers;
 #[path = "hook_breadcrumbs.rs"]
 mod breadcrumbs;
+#[path = "hook_ledger.rs"]
+mod ledger;
+use ledger::{chunk_key, SessionLedger};
 #[path = "hook_memory.rs"]
 mod hook_memory;
 #[path = "hook_memory_anchor.rs"]
@@ -1159,9 +1162,10 @@ async fn inject_context_remote(
     } else {
         PathBuf::from(&input.cwd)
     };
-    let config = find_bobbin_root(&cwd)
-        .and_then(|root| Config::load(&Config::config_path(&root)).ok())
-        .unwrap_or_default();
+    let config = match find_bobbin_root(&cwd) {
+        Some(root) => Config::load_merged(&root)?,
+        None => Config::load_global(),
+    };
     let hooks_cfg = &config.hooks;
 
     // Apply CLI overrides
@@ -1314,12 +1318,14 @@ async fn inject_context_remote(
 
     // Keyword-triggered repo scoping: when query matches configured keywords,
     // scope search to matched repos instead of searching all repos.
-    let keyword_repos = hooks_cfg.resolve_keyword_repos(search_query);
-    let repo_filter = if keyword_repos.is_empty() {
-        None
-    } else {
-        Some(keyword_repos.join(","))
-    };
+    let task_groups = crate::plate::current_groups(work_item.as_deref());
+    let mut prompt_scope =
+        crate::hook_scope::Scope::resolve(&config, &role, task_groups.as_deref())?;
+    prompt_scope.narrow_keywords(&hooks_cfg.resolve_keyword_repos(search_query));
+    if prompt_scope.empty() {
+        return Ok(());
+    }
+    let repo_filter = prompt_scope.csv();
 
     // Repo affinity: boost results from the agent's current repo
     let repo_affinity = detect_repo_name(&cwd);
@@ -1378,7 +1384,9 @@ async fn inject_context_remote(
     let gate = base_gate + intent_adj.gate_boost;
 
     match context_result {
-        Ok(resp) => {
+        Ok(mut resp) => {
+            resp.files
+                .retain(|f| prompt_scope.allows(f.repo.as_deref()));
             if resp.files.is_empty() {
                 return Ok(());
             }
@@ -1840,6 +1848,7 @@ async fn inject_context_remote(
             let matched_bundles: Vec<crate::tags::BundleConfig> = tags_config
                 .match_bundle_keywords(search_query)
                 .into_iter()
+                .filter(|_| !prompt_scope.active())
                 .map(|(b, _)| b.clone())
                 .collect();
 
@@ -1850,7 +1859,7 @@ async fn inject_context_remote(
                 &injection_id,
                 format_mode,
                 &matched_bundles,
-                hooks_cfg.bundle_auto_inject,
+                hooks_cfg.bundle_auto_inject && !prompt_scope.active(),
                 hooks_cfg.bundle_inject_lines,
                 hooks_cfg.bundle_max_inject,
             );
@@ -1901,6 +1910,11 @@ async fn inject_context_remote(
                         "doc_demotion_override": doc_demotion_override,
                         "recency_weight_override": recency_weight_override,
                         "files_returned": &files_json,
+                        "retrieval_scope": prompt_scope.csv(),
+                        "file_provenance": resp.files.iter().map(|f| serde_json::json!({
+                            "path": f.path, "repo": f.repo,
+                            "chunks": f.chunks.iter().map(|c| chunk_key(&f.path, c.start_line, c.end_line)).collect::<Vec<_>>()
+                        })).collect::<Vec<_>>(),
                         "chunks_returned": total_chunks,
                         "injection_id": &injection_id,
                     }),
@@ -1956,6 +1970,7 @@ async fn inject_context_remote(
                 session_id,
                 format_mode,
                 repo_filter.as_deref(),
+                &prompt_scope,
             )
             .await
         }
@@ -2216,11 +2231,14 @@ async fn inject_context_remote_search_fallback(
     session_id: Option<&str>,
     format_mode: &str,
     repo_filter: Option<&str>,
+    prompt_scope: &crate::hook_scope::Scope,
 ) -> Result<()> {
-    let resp = client
+    let mut resp = client
         .search(prompt, "hybrid", repo_filter, 10, None, role)
         .await
         .context("Remote search failed")?;
+    resp.results
+        .retain(|r| prompt_scope.allows(r.repo.as_deref()));
 
     if resp.results.is_empty() {
         return Ok(());
@@ -2970,148 +2988,6 @@ fn compute_session_id(bundle: &crate::search::context::ContextBundle, threshold:
 // Session Ledger: tracks chunks injected across turns for progressive reducing
 // ---------------------------------------------------------------------------
 
-/// A record of a chunk that was injected in a previous turn.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LedgerEntry {
-    chunk_key: String,
-    injection_id: String,
-    turn: u64,
-}
-
-/// Session-level ledger tracking all chunks injected so far.
-/// Stored as JSONL at `.bobbin/session/<cc_session_id>/ledger.jsonl`.
-struct SessionLedger {
-    entries: HashSet<String>, // chunk_keys for fast lookup
-    turn: u64,
-    path: Option<PathBuf>,
-}
-
-impl SessionLedger {
-    /// Load ledger for a Claude Code session. Returns empty ledger if session_id
-    /// is empty or file doesn't exist.
-    fn load(repo_root: &Path, cc_session_id: &str) -> Self {
-        if cc_session_id.is_empty() {
-            return Self {
-                entries: HashSet::new(),
-                turn: 0,
-                path: None,
-            };
-        }
-        let dir = repo_root
-            .join(".bobbin")
-            .join("session")
-            .join(cc_session_id);
-        let path = dir.join("ledger.jsonl");
-
-        let mut entries = HashSet::new();
-        let mut max_turn = 0u64;
-
-        if path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                for line in content.lines() {
-                    if let Ok(entry) = serde_json::from_str::<LedgerEntry>(line) {
-                        if entry.turn > max_turn {
-                            max_turn = entry.turn;
-                        }
-                        entries.insert(entry.chunk_key);
-                    }
-                }
-            }
-        }
-
-        Self {
-            entries,
-            turn: max_turn,
-            path: Some(path),
-        }
-    }
-
-    /// Check if a chunk was already injected in a previous turn.
-    fn contains(&self, chunk_key: &str) -> bool {
-        self.entries.contains(chunk_key)
-    }
-
-    /// Record newly injected chunks. Appends to the JSONL file.
-    fn record(&mut self, chunk_keys: &[String], injection_id: &str) {
-        let new_turn = self.turn + 1;
-        self.turn = new_turn;
-
-        if let Some(path) = &self.path {
-            if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            // Append new entries
-            let mut lines = String::new();
-            for key in chunk_keys {
-                if let Ok(json) = serde_json::to_string(&LedgerEntry {
-                    chunk_key: key.clone(),
-                    injection_id: injection_id.to_string(),
-                    turn: new_turn,
-                }) {
-                    lines.push_str(&json);
-                    lines.push('\n');
-                }
-                self.entries.insert(key.clone());
-            }
-            if !lines.is_empty() {
-                use std::io::Write;
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(path)
-                {
-                    let _ = f.write_all(lines.as_bytes());
-                }
-            }
-        } else {
-            // In-memory only (no session_id)
-            for key in chunk_keys {
-                self.entries.insert(key.clone());
-            }
-        }
-    }
-
-    /// Clear the ledger (used on compaction reset).
-    fn clear(repo_root: &Path, cc_session_id: &str) {
-        if cc_session_id.is_empty() {
-            return;
-        }
-        let path = repo_root
-            .join(".bobbin")
-            .join("session")
-            .join(cc_session_id)
-            .join("ledger.jsonl");
-        let _ = std::fs::remove_file(&path);
-    }
-
-    /// Number of unique chunks tracked.
-    fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    /// Get unique file paths from previously injected chunks.
-    /// Chunk keys are formatted as "file_path:start_line:end_line".
-    fn injected_files(&self) -> Vec<String> {
-        let mut files: HashSet<String> = HashSet::new();
-        for key in &self.entries {
-            // Find the last two colons to extract the file path
-            // Keys are "path:start:end" — path itself may contain colons on Windows
-            if let Some(last_colon) = key.rfind(':') {
-                if let Some(second_colon) = key[..last_colon].rfind(':') {
-                    let file = &key[..second_colon];
-                    files.insert(file.to_string());
-                }
-            }
-        }
-        files.into_iter().collect()
-    }
-}
-
-/// Build a chunk key from file path and chunk line range.
-fn chunk_key(file_path: &str, start_line: u32, end_line: u32) -> String {
-    format!("{}:{}:{}", file_path, start_line, end_line)
-}
-
 /// One injecting turn on a non-prompt event class (bobbin-aa0).
 ///
 /// Prompt submission had all of this and the other injecting paths had none of
@@ -3541,8 +3417,7 @@ async fn inject_context_inner(args: InjectContextArgs, raw: &str) -> Result<()> 
             Some(&input.session_id)
         },
     );
-    let config =
-        Config::load(&Config::config_path(&repo_root)).context("Failed to load bobbin config")?;
+    let config = Config::load_merged(&repo_root).context("Failed to load bobbin config")?;
     let hooks_cfg = &config.hooks;
 
     // Apply CLI overrides
@@ -3718,6 +3593,15 @@ async fn inject_context_inner(args: InjectContextArgs, raw: &str) -> Result<()> 
             .filter(|m| !m.is_empty())
     };
 
+    let role = crate::access::RepoFilter::resolve_role(None);
+    let task_groups = crate::plate::current_groups(work_item.as_deref());
+    let mut prompt_scope =
+        crate::hook_scope::Scope::resolve(&config, &role, task_groups.as_deref())?;
+    prompt_scope.narrow_keywords(&hooks_cfg.resolve_keyword_repos(search_query));
+    if prompt_scope.empty() {
+        return Ok(());
+    }
+
     let context_config = ContextConfig {
         budget_lines: cal_budget.unwrap_or(budget).min(budget),
         budget_unit: config.context.budget_unit,
@@ -3743,7 +3627,7 @@ async fn inject_context_inner(args: InjectContextArgs, raw: &str) -> Result<()> 
         rrf_k: cal_rrf.unwrap_or(config.search.rrf_k),
         bridge_mode: cal_bm.unwrap_or(BridgeMode::default()),
         bridge_boost_factor: cal_bbf.unwrap_or(config.context.bridge_boost_factor),
-        extra_filter: None,
+        extra_filter: prompt_scope.sql(),
         tags_config: None,
         role: None,
         file_type_rules: config.file_types.clone(),
@@ -3798,12 +3682,12 @@ async fn inject_context_inner(args: InjectContextArgs, raw: &str) -> Result<()> 
     }
 
     // 7b. Role-based access filtering
-    let role = crate::access::RepoFilter::resolve_role(None);
     let access_filter = crate::access::RepoFilter::from_config(&config.access, &role);
     let mut bundle = bundle;
-    bundle
-        .files
-        .retain(|f| access_filter.is_allowed(crate::access::RepoFilter::repo_from_path(&f.path)));
+    bundle.files.retain(|f| {
+        prompt_scope.allows(f.repo.as_deref())
+            && access_filter.is_allowed(crate::access::RepoFilter::repo_from_path(&f.path))
+    });
 
     // 7c. Filter out files already in agent context (CLAUDE.md, AGENTS.md, etc.)
     // and static product docs that waste injection budget.
@@ -4097,7 +3981,7 @@ async fn inject_context_inner(args: InjectContextArgs, raw: &str) -> Result<()> 
 
     // 9. Output context (only if we have new chunks) — or try complementary expansion
     if bundle.files.is_empty() || new_chunks == 0 {
-        if reducing_enabled && reduced_count > 0 {
+        if reducing_enabled && reduced_count > 0 && !prompt_scope.active() {
             // 9a. Complementary expansion: find coupled files the agent hasn't seen yet
             let previously_seen_files = ledger.injected_files();
             let seen_set: HashSet<&str> =
@@ -4321,6 +4205,11 @@ async fn inject_context_inner(args: InjectContextArgs, raw: &str) -> Result<()> 
             serde_json::json!({
                 "query": prompt,
                 "files_returned": injected_files,
+                "retrieval_scope": prompt_scope.csv(),
+                "file_provenance": bundle.files.iter().map(|f| serde_json::json!({
+                    "path": f.path, "repo": f.repo,
+                    "chunks": f.chunks.iter().map(|c| chunk_key(&f.path, c.start_line, c.end_line)).collect::<Vec<_>>()
+                })).collect::<Vec<_>>(),
                 "chunks_returned": new_chunks,
                 "top_score": bundle.summary.top_semantic_score,
                 "budget_lines_used": bundle.budget.used_lines,
