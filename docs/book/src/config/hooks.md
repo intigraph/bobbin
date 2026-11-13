@@ -29,6 +29,8 @@ All hook settings live under `[hooks]` in `.bobbin/config.toml` (local) or
 | `feedback_prompt_interval` | int | `5` | Prompt agents to rate injections every N injections. `0` = disabled |
 | `skip_prefixes` | list | `[]` | Prompt prefixes that skip injection entirely (case-insensitive) |
 | `keyword_repos` | list | `[]` | Keyword-triggered repo scoping rules (see below) |
+| `search_group` | string | unset | Default named repository group for prompt retrieval |
+| `roles` | table | `{}` | Role glob to group-name lists; most specific matching glob wins |
 
 ## Gate Threshold vs Threshold
 
@@ -88,7 +90,11 @@ When a prompt matches any keyword (case-insensitive substring), the search
 is scoped to the matched repos instead of searching all repos. Multiple
 rules can match — repos are deduplicated.
 
-If no keywords match, the search falls back to all repos (default behavior).
+If no keywords match, retrieval keeps the task, role or default group. With no
+group configured, it searches all repositories as before. Keyword hints
+intersect a configured group and cannot widen it. See
+[group-scoped prompt retrieval](../guides/hooks.md#scope-prompt-retrieval-to-groups)
+for role and anchored-task examples.
 
 ## Format Modes
 

@@ -99,6 +99,55 @@ pub fn current() -> Option<String> {
 }
 
 /// Add the published work item as a retrieval prior without replacing the prompt.
+/// Read optional group declarations from the same fresh anchored plate.
+/// No tracker query, environment-provided group override, or guessed task scope.
+pub fn current_groups(item: Option<&str>) -> Option<Vec<String>> {
+    let item = item?;
+    let doc = std::fs::read_to_string(plate_path()?).ok()?;
+    if doc.len() > 65536 {
+        return None;
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    let max_age = std::env::var("BOBBIN_PLATE_MAX_AGE_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_MAX_AGE_SECS);
+    parse_groups(&doc, item, now, max_age)
+}
+
+fn parse_groups(doc: &str, item: &str, now: u64, max_age: u64) -> Option<Vec<String>> {
+    if parse(doc, now, max_age).as_deref() != Some(item) {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(doc).ok()?;
+    if value.get("at")?.as_u64()? > now.saturating_add(60) {
+        return None;
+    }
+    let groups = value.get("bobbin_groups")?.as_array()?;
+    if groups.len() > 8 {
+        return None;
+    }
+    groups
+        .iter()
+        .map(|v| {
+            let s = v.as_str()?;
+            if s.is_empty()
+                || s.len() > 64
+                || !s
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+            {
+                return None;
+            }
+            Some(s.to_string())
+        })
+        .collect()
+}
+
+/// Add the published work item as a retrieval prior without replacing the prompt.
 ///
 /// Shared by local and remote injection so the two execution modes cannot
 /// disagree about how work-item scope biases retrieval. Unknown leaves the
@@ -113,7 +162,28 @@ pub fn scope_query<'a>(query: &'a str, item: Option<&str>) -> Cow<'a, str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse, scope_query};
+    use super::{parse, parse_groups, scope_query};
+
+    #[test]
+    fn groups_require_the_same_fresh_item_and_bounded_names() {
+        let doc = r#"{"item":"work-1","at":1000,"bobbin_groups":["engine"]}"#;
+        assert_eq!(
+            parse_groups(doc, "work-1", 1001, 60),
+            Some(vec!["engine".into()])
+        );
+        assert!(parse_groups(doc, "work-2", 1001, 60).is_none());
+        assert!(parse_groups(doc, "work-1", 2000, 60).is_none());
+        assert!(parse_groups(doc, "work-1", 0, 60).is_none());
+        for groups in [
+            r#"["bad,name"]"#,
+            r#"["../other"]"#,
+            r#""engine""#,
+            r#"[null]"#,
+        ] {
+            let doc = format!(r#"{{"item":"work-1","at":1000,"bobbin_groups":{groups}}}"#);
+            assert!(parse_groups(&doc, "work-1", 1001, 60).is_none());
+        }
+    }
 
     #[test]
     fn a_fresh_plate_yields_its_item() {
