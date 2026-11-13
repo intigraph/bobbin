@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="700" viewBox="0 0 1100 700" role="img" aria-labelledby="title desc">
+<title id="title">Bobbin | find code and assemble context</title>
+<desc id="desc">Native semantic retrieval and context from a small local Python fixture; optional graph ranking is unavailable. The animation repeats. The adjacent transcript provides a static alternative.</desc>
+<rect width="100%" height="100%" rx="16" fill="#101827"/>
+<path d="M0 54H1100" stroke="#334155"/>
+<circle cx="28" cy="27" r="7" fill="#fb7185"/>
+<circle cx="52" cy="27" r="7" fill="#fbbf24"/>
+<circle cx="76" cy="27" r="7" fill="#34d399"/>
+<text x="110" y="34" fill="#e2e8f0" font-family="monospace" font-size="20">Bobbin | find code and assemble context</text>
+<g id="frame0" visibility="hidden" font-family="DejaVu Sans Mono, Menlo, monospace" font-size="24">
+<animate attributeName="visibility" calcMode="discrete" values="visible;hidden;hidden" keyTimes="0.000000;0.500000;1.000000" dur="20.000s" repeatCount="indefinite"/>
+<text x="28" y="94" fill="#6ee7b7" xml:space="preserve">$ bobbin search &#x27;calculate invoice total&#x27; --mode semantic --limit</text>
+<text x="28" y="126" fill="#f1f5f9" xml:space="preserve"> 2</text>
+<text x="28" y="158" fill="#f1f5f9" xml:space="preserve">✓ Found 1 results for: calculate invoice total (semantic)</text>
+<text x="28" y="190" fill="#f1f5f9" xml:space="preserve"></text>
+<text x="28" y="222" fill="#f1f5f9" xml:space="preserve">1. totals.py:1 (calculate_total)</text>
+<text x="28" y="254" fill="#f1f5f9" xml:space="preserve">   [totals-example] function python · lines 1-3 · score 0.6736</text>
+</g>
+<g id="frame1" visibility="visible" font-family="DejaVu Sans Mono, Menlo, monospace" font-size="24">
+<animate attributeName="visibility" calcMode="discrete" values="hidden;visible;visible" keyTimes="0.000000;0.500000;1.000000" dur="20.000s" repeatCount="indefinite"/>
+<text x="28" y="94" fill="#6ee7b7" xml:space="preserve">$ bobbin context &#x27;calculate invoice total&#x27; --budget 40</text>
+<text x="28" y="126" fill="#f1f5f9" xml:space="preserve">✓ Context for: calculate invoice total</text>
+<text x="28" y="158" fill="#f1f5f9" xml:space="preserve">  1 files, 1 chunks (3/40 lines)</text>
+<text x="28" y="190" fill="#f1f5f9" xml:space="preserve"></text>
+<text x="28" y="222" fill="#f1f5f9" xml:space="preserve">--- totals.py [direct, score: 1.0000] ---</text>
+<text x="28" y="254" fill="#f1f5f9" xml:space="preserve">  calculate_total (function), lines 1-3</text>
+<text x="28" y="286" fill="#f1f5f9" xml:space="preserve">  def calculate_total(amounts):</text>
+<text x="28" y="318" fill="#f1f5f9" xml:space="preserve">      &quot;&quot;&quot;Calculate the total amount for an invoice.&quot;&quot;&quot;</text>
+<text x="28" y="350" fill="#f1f5f9" xml:space="preserve">      return sum(amounts)</text>
+<text x="28" y="382" fill="#f1f5f9" xml:space="preserve"></text>
+<text x="28" y="414" fill="#f1f5f9" xml:space="preserve">  ! PPR enabled but Quipu store unavailable; continuing without </text>
+<text x="28" y="446" fill="#f1f5f9" xml:space="preserve">graph ranking. Use --verbose for details.</text>
+</g>
+</svg>
