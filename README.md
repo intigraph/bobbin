@@ -50,6 +50,14 @@ greeting:1-2
 Bobbin found a parsed function, with its source range, in the index you just built.
 See the [quick start](https://scbrown.github.io/bobbin/getting-started/quick-start.html) for semantic search.
 
+![Animated terminal: Bobbin finds a function by meaning and assembles its source context](docs/demos/terminal/demo.svg)
+
+This 20-second recording uses a small local Python fixture. Semantic search
+finds the invoice-total function; context returns its source. The optional
+graph store is unavailable, and the recording retains that warning.
+[Read the transcript](docs/demos/terminal/transcript.txt) or
+[reproduce the recording](docs/demos/terminal.md).
+
 ## On your own code
 
 Run `bobbin init` and `bobbin index` from your repository first.

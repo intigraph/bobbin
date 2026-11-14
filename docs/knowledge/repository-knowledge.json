@@ -109,7 +109,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/bobbin/README.md",
       "summary": "Start with installation and the first successful search, then read architecture and contributor guidance.",
-      "source_sha256": "53ac24ef95c0f5aa4cfcda826df06732e3f722f912eb5914d3837048dd6659cb",
+      "source_sha256": "883e46dc9528c956edee68abbfd55cb28c6813e5a545ea15e8a29e887814e7ca",
       "properties": {
         "startHereOrder": "1"
       }

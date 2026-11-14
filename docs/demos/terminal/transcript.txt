@@ -1,0 +1,18 @@
+$ bobbin search 'calculate invoice total' --mode semantic --limit 2
+✓ Found 1 results for: calculate invoice total (semantic)
+
+1. totals.py:1 (calculate_total)
+   [totals-example] function python · lines 1-3 · score 0.6736
+[exit 0]
+$ bobbin context 'calculate invoice total' --budget 40
+✓ Context for: calculate invoice total
+  1 files, 1 chunks (3/40 lines)
+
+--- totals.py [direct, score: 1.0000] ---
+  calculate_total (function), lines 1-3
+  def calculate_total(amounts):
+      """Calculate the total amount for an invoice."""
+      return sum(amounts)
+
+  ! PPR enabled but Quipu store unavailable; continuing without graph ranking. Use --verbose for details.
+[exit 0]

@@ -1,0 +1,46 @@
+{
+  "title": "Bobbin | find code and assemble context",
+  "description": "Native semantic retrieval and context from a small local Python fixture; optional graph ranking is unavailable.",
+  "width": 1100,
+  "height": 700,
+  "font_size": 24,
+  "line_height": 32,
+  "inputs": [
+    "totals.py"
+  ],
+  "steps": [
+    {
+      "tool": "bobbin",
+      "args": [
+        "search",
+        "calculate invoice total",
+        "--mode",
+        "semantic",
+        "--limit",
+        "2"
+      ],
+      "requires": [
+        "calculate_total",
+        "semantic"
+      ],
+      "hold": 10,
+      "timeout": 120
+    },
+    {
+      "tool": "bobbin",
+      "args": [
+        "context",
+        "calculate invoice total",
+        "--budget",
+        "40"
+      ],
+      "requires": [
+        "calculate_total",
+        "graph ranking"
+      ],
+      "allow_stderr": true,
+      "hold": 10,
+      "timeout": 120
+    }
+  ]
+}
