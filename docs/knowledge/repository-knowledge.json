@@ -1,6 +1,6 @@
 {
-  "source_revision": "a233e28419a1e83b6cfa38e24026853f890cc2ba",
-  "reviewed_at": "2026-10-24T03:35:26.186803Z",
+  "source_revision": "36d75c06868e01280eedce67c4285f9bb51199f6",
+  "reviewed_at": "2026-11-22T15:23:47.663400Z",
   "max_age_seconds": 2592000,
   "records": [
     {
@@ -23,8 +23,8 @@
       "kind": "interface",
       "source": "src/cli/mod.rs",
       "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fcli%2Fmod.rs",
-      "summary": "The Commands enum defines the public command surface, including search, context and portable index pack operations.",
-      "source_sha256": "d02753acce4a732f894bf6df25fb5965a3e072e5598d1e990cde12d3883e1810",
+      "summary": "The Commands enum defines the public command surface, including search, context and portable index pack operations. Command help also advertises the optional independent blocking worker budget.",
+      "source_sha256": "a78699cd1163d4bc458966a6fbe605e645e606124f26b7446b991186b16ce50f",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "bobbin Commands enum"
