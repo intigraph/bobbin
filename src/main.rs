@@ -27,6 +27,7 @@ mod primer;
 pub mod reactions;
 mod read_path;
 mod runtime_check;
+mod runtime_config;
 mod search;
 mod storage;
 pub mod tags;
@@ -226,8 +227,12 @@ fn main() -> Result<()> {
     run(cli)
 }
 
-#[tokio::main]
-async fn run(cli: Cli) -> Result<()> {
+fn run(cli: Cli) -> Result<()> {
+    runtime_config::build(std::env::var_os(runtime_config::BLOCKING_THREADS))?
+        .block_on(run_async(cli))
+}
+
+async fn run_async(cli: Cli) -> Result<()> {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(

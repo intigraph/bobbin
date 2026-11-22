@@ -9,6 +9,20 @@ related: [config/index.md, config/search.md, config/embedding.md, config/hooks.m
 
 # Configuration Reference
 
+## Runtime thread budget
+
+`BOBBIN_TOKIO_BLOCKING_THREADS` optionally limits the blocking I/O pool to
+an integer from 1 through 512. For example, set it to `2` in a constrained job's
+managed environment. Invalid or zero values refuse runtime construction.
+Unset preserves the default blocking pool.
+
+This is separate from `TOKIO_WORKER_THREADS`, which sizes async workers. Both
+pools count toward a process or service thread limit. The blocking budget queues
+excess tasks; it does not drop work or raise the service's thread limit. Other
+library worker pools still need their own budgets. A bounded pool is not proof
+that a full indexing workload fits a particular service limit; verify that
+workload's peak and rejection counters after installation.
+
 ## Configuration Hierarchy
 
 Bobbin uses a layered configuration system. Each layer overrides the one above:

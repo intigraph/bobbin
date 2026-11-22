@@ -46,6 +46,9 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "bobbin")]
 #[command(about = "Local-first code context engine")]
+#[command(
+    after_long_help = "Runtime budget: BOBBIN_TOKIO_BLOCKING_THREADS=1..512 bounds blocking I/O workers independently of TOKIO_WORKER_THREADS. Unset preserves Tokio defaults."
+)]
 // version carries the git sha too: "0.6.4 (a1b2c3d)" — a deployed-commit probe. `bobbin 0.6.4`
 // alone is ambiguous — the tag and several commits past it share it — so a
 // version-equality drift check would report CURRENT for a stale binary. The HTTP
