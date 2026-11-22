@@ -21,6 +21,19 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.37.0](https://github.com/intigraph/bobbin/compare/v0.36.1...v0.37.0) (2026-11-22)
+
+
+### Features
+
+* **runtime:** bound blocking workers independently of async workers ([#247](https://github.com/intigraph/bobbin/issues/247)) ([570c899](https://github.com/intigraph/bobbin/commit/570c899a8ccfa980eb40e87ad5f99043e39567e9))
+
+
+### Bug Fixes
+
+* **knowledge:** emit the markdown heading level as headingDepth ([#249](https://github.com/intigraph/bobbin/issues/249)) ([15b1876](https://github.com/intigraph/bobbin/commit/15b1876693688afef7ba23a2c4da97b150056c37))
+* **storage:** defer reader compaction behind shared writer lock ([#244](https://github.com/intigraph/bobbin/issues/244)) ([a89040f](https://github.com/intigraph/bobbin/commit/a89040f90dddd68125fb3f622118df9282c1f4cf))
+
 ## [0.36.1](https://github.com/intigraph/bobbin/compare/v0.36.0...v0.36.1) (2026-11-09)
 
 
