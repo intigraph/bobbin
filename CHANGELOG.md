@@ -21,6 +21,13 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.37.1](https://github.com/intigraph/bobbin/compare/v0.37.0...v0.37.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **release:** load the pinned ORT file for repository packs ([#250](https://github.com/intigraph/bobbin/issues/250)) ([b463ef3](https://github.com/intigraph/bobbin/commit/b463ef35797e9c6d65e810526a69661f577e020f))
+
 ## [0.37.0](https://github.com/intigraph/bobbin/compare/v0.36.1...v0.37.0) (2026-11-22)
 
 
