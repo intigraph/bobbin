@@ -5,6 +5,9 @@ use std::path::PathBuf;
 use super::OutputConfig;
 
 #[derive(Args)]
+#[command(
+    after_help = "Set BOBBIN_INDEX_WRITER_LOCK to an index wrapper's existing lock file to defer opportunistic stats compaction while that writer is active. Missing or unsafe configured locks defer compaction; queries remain available."
+)]
 pub struct ServeArgs {
     /// Directory to serve (defaults to current directory)
     #[arg(default_value = ".")]

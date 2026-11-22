@@ -850,6 +850,123 @@ async fn maintenance_status_is_shared_across_processes_and_throttles_the_read_pa
 }
 
 #[tokio::test]
+async fn read_path_writer_guard_defers_compaction_but_keeps_stats_available() {
+    use fs4::FileExt;
+    let dir = tempdir().unwrap();
+    let lock_path = dir.path().join("writer.lock");
+    std::fs::write(&lock_path, b"existing lock\n").unwrap();
+    let writer = std::fs::File::open(&lock_path).unwrap();
+    writer.lock_exclusive().unwrap();
+
+    // Feature-off positive control: a stats read attempts compaction while
+    // another participant holds this unrelated outer lock.
+    for guarded in [false, true] {
+        let mut store = VectorStore::open(&dir.path().join(format!("vectors-{guarded}")))
+            .await
+            .unwrap();
+        store.read_path_writer_lock = guarded.then(|| lock_path.clone());
+        store
+            .insert(
+                &[sample_chunk("chunk1", "main")],
+                &[sample_embedding()],
+                &no_contexts(1),
+                "default",
+                "abc123",
+                "1234567890",
+            )
+            .await
+            .unwrap();
+        let stats = tokio::time::timeout(std::time::Duration::from_secs(10), store.get_stats(None))
+            .await
+            .expect("stats must not wait for writer")
+            .unwrap();
+        assert_eq!(stats.total_chunks, 1);
+        assert_eq!(
+            store.maintenance_status().last_compact_unix.is_some(),
+            !guarded
+        );
+        println!(
+            "writer held, guard={guarded}: chunks={}, maintenance_recorded={}",
+            stats.total_chunks,
+            store.maintenance_status().last_compact_unix.is_some()
+        );
+
+        if guarded {
+            // Explicit maintenance belongs to a wrapper that already owns
+            // the outer lock; it must not recursively acquire that lock.
+            assert!(store.maintain(SETTLED).await.unwrap().ran());
+        }
+    }
+    assert_eq!(std::fs::read(&lock_path).unwrap(), b"existing lock\n");
+}
+
+#[tokio::test]
+async fn read_path_writer_guard_allows_uncontended_compaction_and_releases_lock() {
+    use fs4::FileExt;
+    let dir = tempdir().unwrap();
+    let lock_path = dir.path().join("writer.lock");
+    std::fs::write(&lock_path, b"existing lock\n").unwrap();
+    let mut store = VectorStore::open(&dir.path().join("vectors"))
+        .await
+        .unwrap();
+    store.read_path_writer_lock = Some(lock_path.clone());
+    store
+        .insert(
+            &[sample_chunk("chunk1", "main")],
+            &[sample_embedding()],
+            &no_contexts(1),
+            "default",
+            "abc123",
+            "1234567890",
+        )
+        .await
+        .unwrap();
+    assert_eq!(store.get_stats(None).await.unwrap().total_chunks, 1);
+    assert!(store.maintenance_status().last_compact_unix.is_some());
+    let next_writer = std::fs::File::open(&lock_path).unwrap();
+    next_writer
+        .try_lock_exclusive()
+        .expect("stats released the outer lock");
+}
+
+#[tokio::test]
+async fn read_path_writer_guard_fails_closed_for_missing_or_unsafe_paths() {
+    let dir = tempdir().unwrap();
+    let missing = dir.path().join("missing.lock");
+    let directory = dir.path().join("directory.lock");
+    std::fs::create_dir(&directory).unwrap();
+    let mut paths = vec![missing.clone(), directory];
+    #[cfg(unix)]
+    {
+        let target = dir.path().join("real.lock");
+        std::fs::write(&target, b"existing lock\n").unwrap();
+        let link = dir.path().join("symlink.lock");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        paths.push(link);
+    }
+    for (index, path) in paths.into_iter().enumerate() {
+        let mut store = VectorStore::open(&dir.path().join(format!("vectors-{index}")))
+            .await
+            .unwrap();
+        store.read_path_writer_lock = Some(path);
+        store
+            .insert(
+                &[sample_chunk("chunk1", "main")],
+                &[sample_embedding()],
+                &no_contexts(1),
+                "default",
+                "abc123",
+                "1234567890",
+            )
+            .await
+            .unwrap();
+        assert_eq!(store.get_stats(None).await.unwrap().total_chunks, 1);
+        assert!(store.maintenance_status().last_compact_unix.is_none());
+    }
+    assert!(!missing.exists(), "a read must not create the writer lock");
+}
+
+#[tokio::test]
 async fn test_needs_reindex() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("vectors");
