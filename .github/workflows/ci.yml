@@ -67,11 +67,19 @@ jobs:
         run: |
           set -euo pipefail
           version=1.24.1
-          curl -fsSL -o ort.tgz \
-            "https://github.com/microsoft/onnxruntime/releases/download/v${version}/onnxruntime-linux-x64-${version}.tgz"
-          tar xzf ort.tgz
-          lib="$PWD/onnxruntime-linux-x64-${version}/lib/libonnxruntime.so"
-          test -s "$lib"   # refuse to continue on a truncated or missing download
+          # The upstream GitHub release URL now returns 404 (the whole
+          # microsoft/onnxruntime repository is unavailable). The same build is
+          # on PyPI: this wheel's libonnxruntime.so.1.24.1 is byte-identical
+          # (sha256 94ac52f6...) to the CPU library the deployed host serves.
+          # Both the wheel and the extracted library are hash-pinned, so a
+          # changed upload fails here instead of testing something else.
+          wheel=onnxruntime-${version}-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+          curl -fsSL -o "$wheel" \
+            "https://files.pythonhosted.org/packages/7d/a1/43ad01b806a1821d1d6f98725edffcdbad54856775643718e9124a09bfbe/${wheel}"
+          echo "34b6119526eda12613f0d0498e2ae59563c247c370c9cef74c2fc93133dde157  ${wheel}" | sha256sum -c -
+          python3 -m zipfile -e "$wheel" ort-wheel
+          lib="$PWD/ort-wheel/onnxruntime/capi/libonnxruntime.so.${version}"
+          echo "94ac52f650e195b784587e1cb7d25b4bf074048b50fa9a7127795b2ed34db22e  ${lib}" | sha256sum -c -
           echo "ORT_DYLIB_PATH=$lib" >> "$GITHUB_ENV"
 
       - name: Setup Rust
