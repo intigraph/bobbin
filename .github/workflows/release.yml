@@ -61,22 +61,38 @@ jobs:
             archive: tar.gz
             ort_asset: onnxruntime-linux-x64
             ort_version: "1.24.1"
+            ort_wheel: "7d/a1/43ad01b806a1821d1d6f98725edffcdbad54856775643718e9124a09bfbe/onnxruntime-1.24.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
+            ort_wheel_sha256: "34b6119526eda12613f0d0498e2ae59563c247c370c9cef74c2fc93133dde157"
+            ort_lib: "libonnxruntime.so.1.24.1"
+            ort_lib_sha256: "94ac52f650e195b784587e1cb7d25b4bf074048b50fa9a7127795b2ed34db22e"
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-22.04
             archive: tar.gz
             ort_asset: onnxruntime-linux-aarch64
             ort_version: "1.24.1"
+            ort_wheel: "21/60/004401cd86525101ad8aa9eec301327426555d7a77fac89fd991c3c7aae6/onnxruntime-1.24.1-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl"
+            ort_wheel_sha256: "780add442ce2d4175fafb6f3102cdc94243acffa3ab16eacc03dd627cc7b1b54"
+            ort_lib: "libonnxruntime.so.1.24.1"
+            ort_lib_sha256: "31d6df98d3a2942ce10472109f988037f330dad6cb1c19e214fd2b1327315ee0"
           - target: aarch64-apple-darwin
             os: macos-15
             archive: tar.gz
             ort_asset: onnxruntime-osx-arm64
             ort_version: "1.24.1"
+            ort_wheel: "c8/30/437de870e4e1c6d237a2ca5e11f54153531270cb5c745c475d6e3d5c5dcf/onnxruntime-1.24.1-cp312-cp312-macosx_14_0_arm64.whl"
+            ort_wheel_sha256: "7307aab9e2e879c0171f37e0eb2808a5b4aec7ba899bb17c5f0cedfc301a8ac2"
+            ort_lib: "libonnxruntime.1.24.1.dylib"
+            ort_lib_sha256: "644ea9751a5e7e56dff293d2a7c3d78f18f8b404e85bade791c0d40a3b950553"
           - target: x86_64-apple-darwin
             os: macos-15-intel
             archive: tar.gz
             # ORT 1.24+ dropped x86_64 macOS; 1.23.2 is the last version with support
             ort_asset: onnxruntime-osx-x86_64
             ort_version: "1.23.2"
+            ort_wheel: "91/9d/a81aafd899b900101988ead7fb14974c8a58695338ab6a0f3d6b0100f30b/onnxruntime-1.23.2-cp312-cp312-macosx_13_0_x86_64.whl"
+            ort_wheel_sha256: "218295a8acae83905f6f1aed8cacb8e3eb3bd7513a13fe4ba3b2664a19fc4a6b"
+            ort_lib: "libonnxruntime.1.23.2.dylib"
+            ort_lib_sha256: "41e7960eccef34f60ca21d091d37bc97d0e70a0b4ce902babf5f795a76e1af74"
 
     steps:
       # ref: the resolved VERSION tag, not the trigger ref. On the release-merge
@@ -181,17 +197,27 @@ jobs:
       - name: Download ONNX Runtime
         shell: bash
         run: |
-          ORT_TAG="v${{ matrix.ort_version }}"
-          ORT_TARBALL="${{ matrix.ort_asset }}-${{ matrix.ort_version }}.tgz"
-          # --fail so a missing/renamed asset errors here, not 2 steps later.
-          curl -sSL --fail "https://github.com/microsoft/onnxruntime/releases/download/${ORT_TAG}/${ORT_TARBALL}" \
-            -o /tmp/ort.tgz
-          mkdir -p /tmp/ort-extracted
-          # NOTE: do NOT use --strip-components here. The osx-x86_64 tarball entries
-          # carry a leading "./" component (others don't), so strip-components=1 would
-          # remove "." and leave the lib one level too deep. Extract verbatim and let
-          # the Package step locate lib/ wherever it lands. See bo-ewk.
-          tar xzf /tmp/ort.tgz -C /tmp/ort-extracted
+          set -euo pipefail
+          # The upstream GitHub release downloads (and repository) are unavailable,
+          # so the same ONNX Runtime build is taken from its PyPI wheel. Both the
+          # wheel and the extracted library are sha256-pinned per target; a changed
+          # upload fails here instead of shipping something else. These are the
+          # same upstream versions but different binaries from the former GitHub
+          # tarballs; the linux-x64 wheel library is the exact file the deployed
+          # server already loads in production.
+          sha() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
+          WHEEL=/tmp/ort.whl
+          curl -sSL --fail "https://files.pythonhosted.org/packages/${{ matrix.ort_wheel }}" -o "$WHEEL"
+          test "$(sha "$WHEEL")" = "${{ matrix.ort_wheel_sha256 }}"
+          rm -rf /tmp/ort-wheel /tmp/ort-extracted
+          python3 -m zipfile -e "$WHEEL" /tmp/ort-wheel
+          LIB="/tmp/ort-wheel/onnxruntime/capi/${{ matrix.ort_lib }}"
+          test "$(sha "$LIB")" = "${{ matrix.ort_lib_sha256 }}"
+          # Keep the layout the Package step expects: a lib/ directory holding
+          # only the core runtime (the wheel's provider and Python modules are not
+          # bundled).
+          mkdir -p /tmp/ort-extracted/lib
+          cp "$LIB" /tmp/ort-extracted/lib/
 
       - name: Package
         shell: bash
