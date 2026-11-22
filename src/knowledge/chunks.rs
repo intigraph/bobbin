@@ -35,6 +35,8 @@ use crate::types::{Chunk, ChunkEdge, ChunkEdgeType, ChunkType};
 #[cfg(test)]
 mod collision_tests;
 mod graph_routing;
+mod heading_depth;
+use heading_depth::section_heading_depth;
 #[cfg(test)]
 mod graph_tests;
 mod remote;
@@ -196,7 +198,7 @@ pub(crate) fn generate_chunk_turtle(chunks: &[Chunk], edges: &[ChunkEdge], repo:
             }
         }
         if let (Some("Section"), Some(heading)) = (governed_type, chunk.name.as_deref()) {
-            let depth = heading.split(" > ").count();
+            let depth = section_heading_depth(&chunk.content, heading);
             turtle.push_str(&format!(
                 "    bobbin:heading \"{}\" ;\n    bobbin:headingDepth \"{depth}\"^^xsd:integer ;\n",
                 escape_literal(heading)
