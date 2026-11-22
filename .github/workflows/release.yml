@@ -300,6 +300,10 @@ jobs:
           mkdir -p "$PACK_HOME/home"
           ORT_LIB_DIR=$(find /tmp/ort-extracted -type d -name lib | head -1)
           export LD_LIBRARY_PATH="$ORT_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          # Wheels contain a versioned library, without the bare soname ort
+          # dlopens by default. Bind the verified matrix file explicitly.
+          export ORT_DYLIB_PATH="$ORT_LIB_DIR/${{ matrix.ort_lib }}"
+          test -r "$ORT_DYLIB_PATH"
           BOBBIN="target/${{ matrix.target }}/release/bobbin"
 
           "$BOBBIN" init "$PACK_HOME/home"

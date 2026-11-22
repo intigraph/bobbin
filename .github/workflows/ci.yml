@@ -131,6 +131,9 @@ jobs:
       - name: Release asset publication contract
         run: python3 scripts/test-release-workflow-contract.py
 
+      - name: Release pack runtime lookup control
+        run: python3 scripts/test-release-pack-runtime.py
+
       - name: Disk space after test job
         if: always()
         run: df -h /
