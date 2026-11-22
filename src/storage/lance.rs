@@ -245,6 +245,8 @@ pub struct VectorStore {
     opened_at: std::time::Instant,
     /// Seconds-since-open of the last read-path compaction attempt (0 = never).
     last_compact_secs: AtomicU64,
+    /// Optional outer lock shared with index wrappers. Readers never create it.
+    read_path_writer_lock: Option<PathBuf>,
 }
 
 /// True for Lance commit conflicts whose own error text says to retry the latest version.
@@ -474,6 +476,7 @@ impl VectorStore {
             db_path: path.to_path_buf(),
             opened_at: std::time::Instant::now(),
             last_compact_secs: AtomicU64::new(0),
+            read_path_writer_lock: std::env::var_os("BOBBIN_INDEX_WRITER_LOCK").map(PathBuf::from),
         })
     }
 
@@ -1078,6 +1081,19 @@ impl VectorStore {
         // elsewhere): either way, hammering the lock on every request is the
         // behavior this throttle exists to stop.
         self.last_compact_secs.store(now, Ordering::Relaxed);
+        // Lock order matches the scheduled wrapper: outer index writer first,
+        // then maintenance. Keep this descriptor alive across the entire await.
+        // Never wait here: a stats request must yield to an active indexer.
+        let _writer_guard = match self.try_read_path_writer_lock() {
+            Ok(guard) => guard,
+            Err(error) => {
+                tracing::debug!(
+                    kind = ?error.kind(),
+                    "read-path compaction deferred: index writer lock unavailable"
+                );
+                return;
+            }
+        };
         // NoWait is load-bearing: the read path is opportunistic and must yield
         // to scheduled maintenance, never queue in front of it.
         self.compact(LockWait::NoWait).await.ok();
@@ -3320,3 +3336,6 @@ mod edge_tests;
 
 #[path = "lance_edges.rs"]
 mod edges;
+
+#[path = "lance_writer_lock.rs"]
+mod writer_lock;
