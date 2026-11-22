@@ -245,6 +245,8 @@ pub struct VectorStore {
     opened_at: std::time::Instant,
     /// Seconds-since-open of the last read-path compaction attempt (0 = never).
     last_compact_secs: AtomicU64,
+    /// Optional outer lock shared with index wrappers. Readers never create it.
+    read_path_writer_lock: Option<PathBuf>,
 }
 
 /// True for Lance commit conflicts whose own error text says to retry the latest version.
@@ -474,6 +476,7 @@ impl VectorStore {
             db_path: path.to_path_buf(),
             opened_at: std::time::Instant::now(),
             last_compact_secs: AtomicU64::new(0),
+            read_path_writer_lock: std::env::var_os("BOBBIN_INDEX_WRITER_LOCK").map(PathBuf::from),
         })
     }
 
@@ -1040,6 +1043,47 @@ impl VectorStore {
         r.map(|()| MaintenanceOutcome::Ran)
     }
 
+    /// Try the index wrapper's outer lock before opportunistic maintenance.
+    /// A configured missing, replaced or non-regular lock fails closed: stats
+    /// remain readable, but this reader must not become an uncoordinated writer.
+    fn try_read_path_writer_lock(&self) -> std::io::Result<Option<std::fs::File>> {
+        use fs4::FileExt;
+        let Some(path) = self.read_path_writer_lock.as_ref() else {
+            return Ok(None);
+        };
+        let named = std::fs::symlink_metadata(path)?;
+        if !named.file_type().is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "index writer lock is not a regular file",
+            ));
+        }
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        }
+        let file = options.open(path)?;
+        file.try_lock_exclusive()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let opened = file.metadata()?;
+            let current = std::fs::symlink_metadata(path)?;
+            if !current.file_type().is_file()
+                || (opened.dev(), opened.ino()) != (current.dev(), current.ino())
+            {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "index writer lock path changed",
+                ));
+            }
+        }
+        Ok(Some(file))
+    }
+
     /// Read-path compaction throttle: attempt a compaction at most once per
     /// interval per process. `get_stats` is called by every search / grep /
     /// status surface, and compacting on each call meant a long compaction on
@@ -1078,6 +1122,19 @@ impl VectorStore {
         // elsewhere): either way, hammering the lock on every request is the
         // behavior this throttle exists to stop.
         self.last_compact_secs.store(now, Ordering::Relaxed);
+        // Lock order matches the scheduled wrapper: outer index writer first,
+        // then maintenance. Keep this descriptor alive across the entire await.
+        // Never wait here: a stats request must yield to an active indexer.
+        let _writer_guard = match self.try_read_path_writer_lock() {
+            Ok(guard) => guard,
+            Err(error) => {
+                tracing::debug!(
+                    kind = ?error.kind(),
+                    "read-path compaction deferred: index writer lock unavailable"
+                );
+                return;
+            }
+        };
         // NoWait is load-bearing: the read path is opportunistic and must yield
         // to scheduled maintenance, never queue in front of it.
         self.compact(LockWait::NoWait).await.ok();

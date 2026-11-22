@@ -405,6 +405,18 @@ Thin-client and HTTP-server options. All keys are unset by default.
 | `bind_address` | string | _(unset → `"0.0.0.0"`)_ | Bind address for `bobbin serve --http`. Runtime fallback is `0.0.0.0` when unset. |
 | `repo_path_prefix` | string | _(unset)_ | Filesystem prefix used to normalize absolute result paths back to repo-relative on the server. |
 
+For a local server sharing its index with a scheduled indexer, set
+`BOBBIN_INDEX_WRITER_LOCK` to the wrapper's existing regular lock file. Stats
+reads then try that exclusive advisory lock before opportunistic compaction.
+An active writer, missing file, or unsafe path defers compaction while stats
+remain available. The reader never creates or truncates the lock. Every writer
+must use the same file; this setting cannot serialize writers that ignore it.
+
+Leave the variable unset for the existing standalone behavior. Set it only on
+readers: an index wrapper that already holds the lock must keep using explicit
+scheduled maintenance, which does not acquire the outer lock again. Deploy the
+binary supporting this variable before enabling it in service configuration.
+
 ### `[dependencies]`
 
 Controls dependency extraction and import resolution.
