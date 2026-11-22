@@ -196,7 +196,7 @@ pub(crate) fn generate_chunk_turtle(chunks: &[Chunk], edges: &[ChunkEdge], repo:
             }
         }
         if let (Some("Section"), Some(heading)) = (governed_type, chunk.name.as_deref()) {
-            let depth = heading.split(" > ").count();
+            let depth = section_heading_depth(&chunk.content, heading);
             turtle.push_str(&format!(
                 "    bobbin:heading \"{}\" ;\n    bobbin:headingDepth \"{depth}\"^^xsd:integer ;\n",
                 escape_literal(heading)
@@ -229,6 +229,30 @@ pub(crate) fn generate_chunk_turtle(chunks: &[Chunk], edges: &[ChunkEdge], repo:
 
 /// The file entity a chunk belongs to: documents live on the live lane's
 /// `doc/` base, source files on `code/` (aegis-6noan).
+/// `bobbin:headingDepth` is the markdown heading LEVEL (`#` = 1, `##` = 2),
+/// per the shared SectionShape. Yupana asserts the same maxCount-1 property on
+/// the same Section IRI from the ATX `#` count, so a breadcrumb length breaks
+/// whenever a document has no H1 or skips a level: post-state holds two values
+/// and every promote of that document is refused (aegis-dxq). A section chunk
+/// begins at its heading line, so read the ATX level there; Yupana emits no
+/// Section for any other heading form, so the breadcrumb length stays as the
+/// fallback for those and cannot collide.
+fn section_heading_depth(content: &str, heading: &str) -> usize {
+    let line = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    let indent = line.len() - line.trim_start_matches(' ').len();
+    let rest = &line[indent..];
+    let hashes = rest.len() - rest.trim_start_matches('#').len();
+    let after = &rest[hashes..];
+    if indent <= 3
+        && (1..=6).contains(&hashes)
+        && (after.is_empty() || after.starts_with(' ') || after.starts_with('\t'))
+    {
+        hashes
+    } else {
+        heading.split(" > ").count()
+    }
+}
+
 fn file_entity_iri(repo: &str, chunk: &Chunk) -> String {
     if matches!(chunk.language.as_str(), "markdown" | "pdf") {
         crate::iri::document_iri(repo, &chunk.file_path)
@@ -433,6 +457,33 @@ mod tests {
         ));
         assert!(turtle.contains("bobbin:heading \"Guide > Setup\""));
         assert!(turtle.contains("bobbin:headingDepth \"2\"^^xsd:integer"));
+    }
+
+    #[test]
+    fn heading_depth_is_the_atx_level_not_the_breadcrumb_length() {
+        // aegis-dxq: quipu's README has no H1, so "## Before you start" has a
+        // one-segment breadcrumb. Yupana says 2 for the same IRI; a breadcrumb
+        // count said 1 and post-state refused every promote of the README.
+        let mut no_h1 = chunk("a", "README.md", 110, Some("Before you start"));
+        no_h1.content = "## Before you start\n\nRead this first.".into();
+        let mut skipped = chunk("b", "README.md", 120, Some("Top > Deep"));
+        skipped.content = "   ### Deep\nbody".into();
+        let turtle = generate_chunk_turtle(&[no_h1, skipped], &[], "repo");
+        let block = |anchor: &str| {
+            let start = turtle.find(&format!("README.md#{anchor}> a")).unwrap();
+            turtle[start..].split("\n\n").next().unwrap().to_string()
+        };
+        assert!(block("before-you-start").contains("bobbin:headingDepth \"2\"^^xsd:integer"));
+        assert!(block("deep").contains("bobbin:headingDepth \"3\"^^xsd:integer"));
+
+        // Not an ATX heading (no space, 7 hashes, 4-space indent, setext):
+        // Yupana emits no Section for these, so the breadcrumb fallback stays.
+        assert_eq!(section_heading_depth("#hashtag", "A > B"), 2);
+        assert_eq!(section_heading_depth("####### seven", "A"), 1);
+        assert_eq!(section_heading_depth("    ## code", "A > B > C"), 3);
+        assert_eq!(section_heading_depth("Title\n=====", "Title"), 1);
+        assert_eq!(section_heading_depth("\n\n#### Four", "X"), 4);
+        assert_eq!(section_heading_depth("#", "X > Y"), 1);
     }
 
     #[test]
