@@ -9,19 +9,23 @@
 /// Section for any other heading form, so the breadcrumb length stays as the
 /// fallback for those and cannot collide.
 pub(super) fn section_heading_depth(content: &str, heading: &str) -> usize {
-    let line = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    section_heading_prefix(content)
+        .map(|prefix| prefix.bytes().filter(|byte| *byte == b'#').count())
+        .unwrap_or_else(|| heading.split(" > ").count())
+}
+
+/// Retain only observed ATX syntax for content-free graph projection rows.
+/// At most three spaces and six hashes survive; no title or body text does.
+pub(crate) fn section_heading_prefix(content: &str) -> Option<&str> {
+    let line = content.lines().find(|l| !l.trim().is_empty())?;
     let indent = line.len() - line.trim_start_matches(' ').len();
     let rest = &line[indent..];
     let hashes = rest.len() - rest.trim_start_matches('#').len();
     let after = &rest[hashes..];
-    if indent <= 3
+    (indent <= 3
         && (1..=6).contains(&hashes)
-        && (after.is_empty() || after.starts_with(' ') || after.starts_with('\t'))
-    {
-        hashes
-    } else {
-        heading.split(" > ").count()
-    }
+        && (after.is_empty() || after.starts_with(' ') || after.starts_with('\t')))
+    .then_some(&line[..indent + hashes])
 }
 
 #[cfg(test)]

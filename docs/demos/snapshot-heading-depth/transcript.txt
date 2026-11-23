@@ -1,0 +1,8 @@
+BEFORE: old content.clear() snapshot, same new regression
+assertion failed: section_block("before-you-start").contains("bobbin:headingDepth \"2\"^^xsd:integer")
+test cli::index::graph_push::tests::snapshot_preserves_heading_levels_without_retaining_document_text ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1386 filtered out; finished in 0.02s
+
+AFTER: heading prefix retained by snapshot
+test cli::index::graph_push::tests::snapshot_preserves_heading_levels_without_retaining_document_text ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1386 filtered out; finished in 0.01s
