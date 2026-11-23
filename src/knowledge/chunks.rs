@@ -35,7 +35,7 @@ use crate::types::{Chunk, ChunkEdge, ChunkEdgeType, ChunkType};
 #[cfg(test)]
 mod collision_tests;
 mod graph_routing;
-mod heading_depth;
+pub(crate) mod heading_depth;
 use heading_depth::section_heading_depth;
 #[cfg(test)]
 mod graph_tests;

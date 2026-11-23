@@ -20,7 +20,15 @@ pub(super) async fn snapshot(
     for file in files {
         let mut stored = store.get_chunks_for_file(file, Some(repo)).await?;
         for chunk in &mut stored {
-            chunk.content.clear();
+            // The serializer needs the observed heading level even for unchanged
+            // files. Keep only its bounded ATX syntax, never title/body text.
+            chunk.content = if chunk.chunk_type == crate::types::ChunkType::Section {
+                crate::knowledge::chunks::heading_depth::section_heading_prefix(&chunk.content)
+                    .unwrap_or("")
+                    .to_owned()
+            } else {
+                String::new()
+            };
         }
         chunks.extend(stored);
         edges.extend(store.get_chunk_edges(file, Some(repo)).await?);
@@ -166,6 +174,62 @@ mod tests {
             format!("{err:#}"),
             "chunk-graph publication incomplete: dropped_pushes=1; refusing a success exit: POST /knot timed out"
         );
+    }
+
+    #[cfg(feature = "knowledge")]
+    #[tokio::test]
+    async fn snapshot_preserves_heading_levels_without_retaining_document_text() {
+        use crate::storage::VectorStore;
+        use crate::types::{Chunk, ChunkType};
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = VectorStore::open_with_dim(&dir.path().join("vectors"), 2)
+            .await
+            .unwrap();
+        let section = |id: &str, name: &str, content: &str| Chunk {
+            id: id.into(),
+            file_path: "README.md".into(),
+            chunk_type: ChunkType::Section,
+            name: Some(name.into()),
+            start_line: 1,
+            end_line: 3,
+            content: content.into(),
+            language: "markdown".into(),
+            tags: String::new(),
+        };
+        store
+            .insert(
+                &[
+                    section(
+                        "a",
+                        "Before you start",
+                        "## Before you start\nPRIVATE_BODY_A",
+                    ),
+                    section("b", "Top > Deep", "   #### Deep\nPRIVATE_BODY_B"),
+                ],
+                &[vec![1.0, 0.0], vec![0.0, 1.0]],
+                &[None, None],
+                "r",
+                "h",
+                "2026-01-01T00:00:00Z",
+            )
+            .await
+            .unwrap();
+        let files = ["README.md".to_string()].into_iter().collect();
+        let (chunks, edges) = super::snapshot(&store, "r", &files).await.unwrap();
+        let turtle = crate::knowledge::chunks::generate_chunk_turtle(&chunks, &edges, "r");
+        let section_block = |anchor: &str| {
+            let start = turtle.find(&format!("README.md#{anchor}> a")).unwrap();
+            turtle[start..].split("\n\n").next().unwrap().to_string()
+        };
+        assert!(
+            section_block("before-you-start").contains("bobbin:headingDepth \"2\"^^xsd:integer")
+        );
+        assert!(section_block("deep").contains("bobbin:headingDepth \"4\"^^xsd:integer"));
+        assert!(chunks
+            .iter()
+            .all(|chunk| chunk.content.len() <= 9
+                && chunk.content.chars().all(|c| c == ' ' || c == '#')));
+        assert!(!turtle.contains("PRIVATE_BODY"));
     }
 
     #[cfg(feature = "knowledge")]
