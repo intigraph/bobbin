@@ -355,3 +355,66 @@ fn an_unparseable_created_at_is_treated_as_unbounded() {
     assert!(bead_visible(&config, "closed", None));
     assert!(bead_visible(&config, "closed", Some("not-a-timestamp")));
 }
+
+#[test]
+fn test_is_inbox_pointer_prefix_only() {
+    assert!(is_inbox_pointer("inbox: hello"));
+    assert!(is_inbox_pointer("  Inbox:hello"));
+    assert!(is_inbox_pointer("INBOX:"));
+    assert!(!is_inbox_pointer("Drain the inbox: stale mail"));
+    assert!(!is_inbox_pointer("inbox cleanup"));
+    assert!(!is_inbox_pointer("inbo"));
+    assert!(!is_inbox_pointer(""));
+    // Non-ASCII before byte 6 must not panic on a char boundary.
+    assert!(!is_inbox_pointer("ínbox: x"));
+}
+
+fn indexed_result(id: &str, title: &str) -> SearchResult {
+    SearchResult {
+        chunk: Chunk {
+            id: id.to_string(),
+            file_path: bead_file_path("aegis", id),
+            chunk_type: ChunkType::Issue,
+            name: Some(title.to_string()),
+            start_line: 0,
+            end_line: 0,
+            content: title.to_string(),
+            language: "beads".to_string(),
+            tags: String::new(),
+        },
+        score: 0.9,
+        match_type: None,
+        indexed_at: None,
+        repo: None,
+    }
+}
+
+/// aegis-8dda.4 query-time half: an index built BEFORE the index-time filter
+/// still holds pointer chunks; search must drop them without a reindex.
+#[test]
+fn test_retain_work_items_filters_stale_index() {
+    let mut results = vec![
+        indexed_result("aegis-ptr", "inbox: msg from sattler"),
+        indexed_result("aegis-work", "Fix search ranking"),
+        indexed_result("aegis-mid", "Clean up the inbox: drain stale mail"),
+        // Indexed under a normal title, but the live store says it is a pointer.
+        indexed_result("aegis-renamed", "old title"),
+    ];
+    let mut live = HashMap::new();
+    live.insert(
+        "aegis-renamed".to_string(),
+        LiveBeadMetadata {
+            status: "open".into(),
+            priority: 2,
+            assignee: None,
+            title: "Inbox: retired pointer".into(),
+            issue_type: "task".into(),
+            owner: String::new(),
+            labels: vec![],
+            created_at: None,
+        },
+    );
+    retain_work_items(&mut results, &live);
+    let ids: Vec<&str> = results.iter().map(|r| r.chunk.id.as_str()).collect();
+    assert_eq!(ids, vec!["aegis-work", "aegis-mid"]);
+}

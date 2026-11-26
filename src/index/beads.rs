@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
 use crate::config::{BeadsConfig, BeadsSource};
-use crate::types::{Chunk, ChunkType};
+use crate::types::{Chunk, ChunkType, SearchResult};
 
 /// Live metadata for a bead, fetched from the configured store.
 #[derive(Debug, Clone)]
@@ -70,6 +70,37 @@ fn bead_excluded(labels: &[String], exclude_labels: &[String]) -> bool {
     labels
         .iter()
         .any(|l| exclude_labels.iter().any(|x| x.eq_ignore_ascii_case(l)))
+}
+
+/// True if a bead title marks a retired-store inbox pointer (`inbox: ...`).
+///
+/// Inbox pointers are messages, not work items (aegis-8dda.4): they must never
+/// be indexed or returned as work. Matched case-insensitively after trimming,
+/// and only as a PREFIX — a title merely mentioning "inbox" is real work.
+pub fn is_inbox_pointer(title: &str) -> bool {
+    title
+        .trim_start()
+        .get(..6)
+        .is_some_and(|p| p.eq_ignore_ascii_case("inbox:"))
+}
+
+/// Query-time half of the inbox-pointer exclusion: drop results whose indexed
+/// title, or live title when one was fetched, is an inbox pointer. Applied on
+/// every bead search path so an index built before the index-time filter is
+/// cleaned without a reindex.
+pub fn retain_work_items(
+    results: &mut Vec<SearchResult>,
+    live_metadata: &HashMap<String, LiveBeadMetadata>,
+) {
+    results.retain(|r| {
+        if r.chunk.name.as_deref().is_some_and(is_inbox_pointer) {
+            return false;
+        }
+        let bead_id = r.chunk.file_path.split(':').nth(2).unwrap_or("");
+        !live_metadata
+            .get(bead_id)
+            .is_some_and(|m| is_inbox_pointer(&m.title))
+    });
 }
 
 /// Assemble the embeddable text for a bead from its fields, comments, and labels.
@@ -158,6 +189,10 @@ fn rows_to_chunks(
             let labels = labels_by_issue.get(&issue.id).cloned().unwrap_or_default();
             // Skip beads carrying an excluded label (e.g. security).
             if bead_excluded(&labels, exclude_labels) {
+                return None;
+            }
+            // Inbox pointers are messages, not work (aegis-8dda.4).
+            if is_inbox_pointer(&issue.title) {
                 return None;
             }
             let issue_comments: Vec<&CommentRow> = comments_by_issue

@@ -282,3 +282,34 @@ fn the_source_label_names_the_path_and_its_age() {
         crate::index::beads::source_label(&missing)
     );
 }
+
+/// aegis-8dda.4: retired-store `inbox:` pointers are messages, not work. An
+/// index built from a store holding one pointer and one real item must hold
+/// only the real item — and a title that merely mentions "inbox" stays.
+#[test]
+fn inbox_pointers_are_never_indexed_as_work() {
+    let f = write_jsonl(&[
+        r#"{"id":"aegis-ptr1","title":"inbox: msg from sattler","description":"pointer","status":"open"}"#,
+        r#"{"id":"aegis-ptr2","title":"  INBOX: shouted pointer","description":"pointer","status":"open"}"#,
+        r#"{"id":"aegis-work","title":"Fix search ranking","description":"real","status":"open"}"#,
+        r#"{"id":"aegis-mid","title":"Clean up the inbox: drain stale mail","description":"real","status":"open"}"#,
+    ]);
+    let cfg = config_for(f.path().to_str().unwrap());
+    let chunks = fetch_from_file(&cfg, f.path().to_str().unwrap(), "beads_aegis", None).unwrap();
+    let mut ids: Vec<&str> = chunks
+        .iter()
+        .map(|c| c.file_path.rsplit(':').next().unwrap())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, vec!["aegis-mid", "aegis-work"]);
+
+    // The single-bead path returns empty, which callers treat as "remove".
+    let one = fetch_from_file(
+        &cfg,
+        f.path().to_str().unwrap(),
+        "beads_aegis",
+        Some("aegis-ptr1"),
+    )
+    .unwrap();
+    assert!(one.is_empty());
+}

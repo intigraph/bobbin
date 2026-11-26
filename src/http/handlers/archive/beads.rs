@@ -134,6 +134,9 @@ pub(crate) async fn search_beads(
         std::collections::HashMap::new()
     };
 
+    // Inbox pointers are messages, never work items (aegis-8dda.4).
+    crate::index::beads::retain_work_items(&mut filtered, &live_metadata);
+
     // Apply all filters
     let has_filters = params.status.is_some()
         || params.priority.is_some()

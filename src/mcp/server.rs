@@ -2028,6 +2028,9 @@ impl BobbinMcpServer {
             std::collections::HashMap::new()
         };
 
+        // Inbox pointers are messages, never work items (aegis-8dda.4).
+        crate::index::beads::retain_work_items(&mut filtered, &live_metadata);
+
         // Apply all filters using live data when available
         let has_filters = req.status.is_some()
             || req.priority.is_some()
