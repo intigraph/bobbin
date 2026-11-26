@@ -21,6 +21,14 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.37.3](https://github.com/intigraph/bobbin/compare/v0.37.2...v0.37.3) (2026-11-26)
+
+
+### Bug Fixes
+
+* **beads:** never return 'inbox:' pointer items as work (aegis-tcjf) ([2ee715c](https://github.com/intigraph/bobbin/commit/2ee715cb004516d195645164c1a30a99cf2a107a))
+* **beads:** never return 'inbox:' pointer items as work (aegis-tcjf) ([94f1331](https://github.com/intigraph/bobbin/commit/94f133106293047cf16035bbf310b4d3528b789f))
+
 ## [0.37.2](https://github.com/intigraph/bobbin/compare/v0.37.1...v0.37.2) (2026-11-23)
 
 
