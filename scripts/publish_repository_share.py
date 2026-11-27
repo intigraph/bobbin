@@ -28,9 +28,16 @@ MEMBERS = {
 
 
 def command(args):
-    return subprocess.run(
-        [str(v) for v in args], check=True, capture_output=True, text=True
-    ).stdout
+    try:
+        return subprocess.run([str(v) for v in args], check=True, capture_output=True, text=True).stdout
+    except subprocess.CalledProcessError as error:
+        # Print the failing tool's own (bounded) stderr before re-raising. The
+        # traceback alone names the command but not why it failed, and the
+        # caller keeps only this process's stderr.
+        detail = (error.stderr or "").strip()[-8192:]
+        if detail:
+            print(f"{Path(str(error.cmd[0])).name} exited {error.returncode}: {detail}", file=sys.stderr)
+        raise
 
 
 def digest(path):
