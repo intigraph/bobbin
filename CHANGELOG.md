@@ -21,6 +21,18 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.38.0](https://github.com/intigraph/bobbin/compare/v0.37.3...v0.38.0) (2026-11-27)
+
+
+### Features
+
+* **beads:** seeds board source + change-feed page reader (aegis-8dda.4) ([#258](https://github.com/intigraph/bobbin/issues/258)) ([aa5a3d5](https://github.com/intigraph/bobbin/commit/aa5a3d5f6081f6bdbba764865802c2c732812826))
+
+
+### Bug Fixes
+
+* **share:** surface the failing tool's stderr when a publish command fails ([#256](https://github.com/intigraph/bobbin/issues/256)) ([f8614ca](https://github.com/intigraph/bobbin/commit/f8614caa8ad0dbd0b632ba56de79546f16006469))
+
 ## [0.37.3](https://github.com/intigraph/bobbin/compare/v0.37.2...v0.37.3) (2026-11-26)
 
 
