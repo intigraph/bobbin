@@ -57,7 +57,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/bobbin/src%2Fconfig.rs",
       "summary": "Configuration types define keys and defaults, including embedding.backend, embedding.model and embedding.batch_size.",
-      "source_sha256": "cf69c283d9af17e4ccd1b9181dc6673b48cd4e7c7b7394bf4ba13af7c61958b0",
+      "source_sha256": "4b9e353211111fd96bc0cffc3d26a035f03a8ebedb2c9732c8ce4c360473715b",
       "properties": {
         "interfaceKind": "config",
         "publicName": "Bobbin configuration types"

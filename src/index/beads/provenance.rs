@@ -8,6 +8,7 @@ use crate::config::{BeadsConfig, BeadsSource};
 pub const INDEX_WARNING: &str = "Bead discovery uses the last indexed corpus, not the current tracker. New or changed beads may be absent; zero results do not establish absence from the active board.";
 const SNAPSHOT_WARNING: &str = "Metadata is from an exported JSONL snapshot, not live tracker state. This includes retained exports from retired trackers. Verify status, priority and assignee against the active board before routing work. File modification time does not prove export freshness or current-board authority.";
 const STORE_WARNING: &str = "Metadata was queried from the configured database; its authority as the active board has not been verified. A retained retired database can answer successfully. Verify current state with the active tracker before routing work.";
+const SEEDS_WARNING: &str = "Metadata was read at search time from the configured seeds board graph in Quipu. Bobbin has not verified that graph's authority as the active board; confirm with sd before a dedupe or routing decision.";
 const UNKNOWN_WARNING: &str = "Metadata source and as-of time are unreported. These fields may be stale indexed content or a retired-store snapshot; verify current state with the active tracker before routing work.";
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -57,6 +58,10 @@ impl BeadMetadataProvenance {
                         .map(|time| {
                             DateTime::<Utc>::from(time).to_rfc3339_opts(SecondsFormat::Millis, true)
                         });
+                }
+                BeadsSource::Seeds => {
+                    result.source = "seeds_board_graph".into();
+                    result.warning = SEEDS_WARNING.into();
                 }
                 BeadsSource::Dolt => {
                     result.source = "configured_database".into();

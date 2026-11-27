@@ -158,6 +158,7 @@ mod dolt;
 mod jsonl;
 mod keys;
 pub mod provenance;
+pub mod seeds;
 pub(crate) use keys::issues_where_clause;
 pub use keys::{bead_file_path, bead_file_paths, rig_of};
 
@@ -328,6 +329,22 @@ pub fn source_label(config: &BeadsConfig) -> String {
                 format!("br JSONL ({})", paths.join(", "))
             }
         }
+        BeadsSource::Seeds => {
+            let graphs: Vec<String> = config
+                .databases
+                .iter()
+                .map(|db| seeds::graph_for(config, db))
+                .collect();
+            format!(
+                "seeds board at {} ({}; comments not projected)",
+                if config.seeds.url.is_empty() {
+                    "NO [beads.seeds] url CONFIGURED"
+                } else {
+                    &config.seeds.url
+                },
+                graphs.join(", ")
+            )
+        }
     }
 }
 
@@ -342,6 +359,7 @@ async fn fetch_from_source(
         BeadsSource::Jsonl => {
             jsonl::fetch_from_file(config, jsonl_path_for(config, db_name)?, db_name, only_id)
         }
+        BeadsSource::Seeds => seeds::fetch_from_graph(config, db_name, only_id).await,
     }
 }
 
@@ -362,6 +380,7 @@ pub async fn fetch_bead_metadata(
     match config.source {
         BeadsSource::Dolt => dolt::fetch_bead_metadata(config, bead_ids).await,
         BeadsSource::Jsonl => jsonl::fetch_bead_metadata(config, bead_ids),
+        BeadsSource::Seeds => seeds::fetch_bead_metadata(config, bead_ids).await,
     }
 }
 
