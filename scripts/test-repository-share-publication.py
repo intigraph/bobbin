@@ -322,5 +322,39 @@ def load_tests(loader, tests, pattern):
     return tests
 
 
+class CommandStderr(unittest.TestCase):
+    """A failed tool's own stderr must reach this process's stderr."""
+
+    def run_command(self, code):
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            try:
+                return publisher.command([sys.executable, "-c", code]), err.getvalue(), None
+            except subprocess.CalledProcessError as error:
+                return None, err.getvalue(), error
+
+    def test_failed_command_surfaces_its_stderr_and_still_raises(self):
+        out, err, error = self.run_command(
+            "import sys; sys.stderr.write('HTTP 422: asset name already exists'); sys.exit(3)")
+        self.assertIsNotNone(error)
+        self.assertEqual(error.returncode, 3)
+        self.assertIn("HTTP 422: asset name already exists", err)
+        self.assertIn("exited 3", err)
+
+    def test_failed_command_stderr_is_bounded(self):
+        _, err, error = self.run_command("import sys; sys.stderr.write('x' * 20000 + 'TAIL'); sys.exit(1)")
+        self.assertIsNotNone(error)
+        self.assertIn("TAIL", err)
+        self.assertLess(len(err), 8500)
+
+    def test_success_returns_stdout_and_stays_quiet(self):
+        out, err, error = self.run_command("print('ok')")
+        self.assertIsNone(error)
+        self.assertEqual(out, "ok\n")
+        self.assertEqual(err, "")
+
+
 if __name__ == "__main__":
     unittest.main()
