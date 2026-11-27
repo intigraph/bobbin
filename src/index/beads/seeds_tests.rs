@@ -16,21 +16,19 @@ fn config() -> BeadsConfig {
     }
 }
 
-fn row(id: &str, title: &str, status: &str, keyword: Option<&str>) -> Value {
-    let mut r = json!({
+fn row(id: &str, title: &str, status: &str) -> Value {
+    json!({
         "id": id,
         "title": title,
+        "n_title": 1,
         "status": status,
+        "n_status": 1,
         "priority": 1,
         "type": "task",
         "assignee": "https://seeds.local/principal/sattler",
         "owner": "https://seeds.local/principal/ian",
         "created": {"value": "2026-11-21T22:44:11Z", "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"},
-    });
-    if let Some(k) = keyword {
-        r["keyword"] = json!(k);
-    }
-    r
+    })
 }
 
 #[test]
@@ -47,14 +45,19 @@ fn graph_defaults_to_seeds_project_convention_and_honours_override() {
 }
 
 #[test]
-fn fold_rows_merges_keywords_and_strips_principal_iris() {
+fn fold_rows_and_keywords_strip_principals_and_merge_labels() {
     let rows = vec![
-        row("aegis-1", "one", "open", Some("pitch")),
-        row("aegis-1", "one", "open", Some("bobbin")),
-        row("aegis-2", "two", "in_progress", None),
+        row("aegis-1", "one", "open"),
+        row("aegis-2", "two", "in_progress"),
     ];
-    let (items, last) = fold_rows(&rows);
-    assert_eq!(last.as_deref(), Some("aegis-2"));
+    let mut items = fold_rows(&rows).unwrap();
+    let kw = vec![
+        json!({"id": "aegis-1", "keyword": "pitch"}),
+        json!({"id": "aegis-1", "keyword": "bobbin"}),
+        json!({"id": "aegis-1", "keyword": "pitch"}),
+        json!({"id": "other", "keyword": "x"}),
+    ];
+    attach_keywords(&mut items, &kw, 10).unwrap();
     assert_eq!(items.len(), 2);
     assert_eq!(items[0].labels, vec!["pitch", "bobbin"]);
     assert_eq!(items[0].assignee.as_deref(), Some("sattler"));
@@ -65,12 +68,44 @@ fn fold_rows_merges_keywords_and_strips_principal_iris() {
 }
 
 #[test]
+fn multi_valued_scalar_facts_are_refused_not_sampled() {
+    let mut r = row("aegis-1", "one", "open");
+    r["n_title"] = json!(2);
+    let err = fold_rows(&[r]).unwrap_err().to_string();
+    assert!(err.contains("2 title values"), "{err}");
+    let mut r = row("aegis-1", "one", "open");
+    r["n_status"] = json!({"value": "3", "datatype": "xsd:integer"});
+    assert!(fold_rows(&[r]).is_err());
+}
+
+#[test]
+fn keyword_reply_past_cap_is_an_error() {
+    let mut items = fold_rows(&[row("aegis-1", "one", "open")]).unwrap();
+    let kw: Vec<Value> = (0..3)
+        .map(|i| json!({"id": "aegis-1", "keyword": format!("k{i}")}))
+        .collect();
+    assert!(attach_keywords(&mut items, &kw, 2).is_err());
+    assert!(attach_keywords(&mut items, &kw, 3).is_ok());
+}
+
+#[test]
+fn unparseable_priority_and_missing_type_fall_back() {
+    let mut r = row("aegis-1", "one", "open");
+    r["priority"] = json!("high");
+    r.as_object_mut().unwrap().remove("type");
+    let items = fold_rows(&[r]).unwrap();
+    assert_eq!(items[0].priority, 2);
+    assert_eq!(items[0].issue_type, "task");
+}
+
+#[test]
 fn inbox_pointers_and_closed_items_never_become_chunks() {
-    let (items, _) = fold_rows(&[
-        row("aegis-1", "real work mentioning inbox", "open", None),
-        row("aegis-2", "  Inbox: mail pointer", "open", None),
-        row("aegis-3", "done", "closed", None),
-    ]);
+    let items = fold_rows(&[
+        row("aegis-1", "real work mentioning inbox", "open"),
+        row("aegis-2", "  Inbox: mail pointer", "open"),
+        row("aegis-3", "done", "closed"),
+    ])
+    .unwrap();
     let chunks = items_to_chunks(&config(), "beads_aegis", items);
     let names: Vec<_> = chunks.iter().filter_map(|c| c.name.clone()).collect();
     assert_eq!(chunks.len(), 1, "{names:?}");
@@ -78,17 +113,30 @@ fn inbox_pointers_and_closed_items_never_become_chunks() {
 }
 
 #[test]
-fn items_query_escapes_ids_and_pages_by_keyset() {
-    let q = items_query(Some("aegis-\"x"), Some(&["a\\b".to_string()]), 50);
-    assert!(q.contains(r#"FILTER(STR(?id) > "aegis-\"x")"#), "{q}");
-    assert!(q.contains(r#"VALUES ?id { "a\\b" }"#), "{q}");
-    assert!(q.ends_with("ORDER BY ?id LIMIT 50"));
+fn queries_escape_ids_page_by_keyset_and_bound_rows() {
+    let p = id_page_query(Some("aegis-\"x"), 50);
+    assert!(p.contains(r#"FILTER(STR(?id) > "aegis-\"x")"#), "{p}");
+    assert!(p.ends_with("ORDER BY ?id LIMIT 50"), "{p}");
+    assert!(!id_page_query(None, 5).contains("FILTER"));
+    let q = items_query(&["a\\b".to_string(), "c".to_string()]);
+    assert!(q.contains(r#"VALUES ?id { "a\\b" "c" }"#), "{q}");
+    assert!(q.ends_with("GROUP BY ?id ORDER BY ?id LIMIT 2"), "{q}");
+    assert!(
+        !q.contains("keywords"),
+        "keywords must not multiply item rows: {q}"
+    );
+    let k = keywords_query(&["a\"b".to_string()], 64);
+    assert!(k.contains(r#"VALUES ?id { "a\"b" }"#), "{k}");
+    assert!(k.ends_with("LIMIT 65"), "{k}");
 }
 
 #[test]
 fn truncated_or_rowless_replies_are_errors_not_empty_boards() {
     assert!(parse_query_reply(r#"{"rows":[],"truncated":true}"#, "g").is_err());
     assert!(parse_query_reply(r#"{"error":"x"}"#, "g").is_err());
+    // No `truncated` field is unproven completeness, not completeness.
+    assert!(parse_query_reply(r#"{"rows":[]}"#, "g").is_err());
+    assert!(parse_query_reply(r#"{"rows":[],"truncated":null}"#, "g").is_err());
     assert_eq!(
         parse_query_reply(r#"{"rows":[],"truncated":false}"#, "g")
             .unwrap()
@@ -118,6 +166,11 @@ fn change_page_reduces_to_item_ids_and_cursor() {
     );
     assert_eq!(page.next_tx, 11);
     assert_eq!(page.watermark_tx, 40);
+    // next_tx is the reply's cursor, used verbatim as the next (exclusive)
+    // `since`; it is never derived from record txs.
+    let p = parse_changes(r#"{"records":[],"next_tx":7}"#).unwrap();
+    assert!(p.item_ids.is_empty());
+    assert_eq!((p.next_tx, p.watermark_tx), (7, 7));
 }
 
 #[test]

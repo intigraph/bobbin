@@ -16,12 +16,7 @@
 //!
 //! ## Change feed
 //!
-//! [`changes_page`] pulls ONE bounded page of `/changes` for the board graph
-//! and reduces it to the set of item ids it touched plus the next cursor. The
-//! caller re-indexes exactly those ids through the existing single-bead path
-//! (`fetch_bead`), which removes an item that became closed, deleted or an
-//! inbox pointer. The feed is a hint to re-read canonical state; record bodies
-//! are never indexed directly.
+//! See [`feed`]: one bounded `/changes` page reduced to touched item ids.
 //!
 //! Comments are not projected yet: seeds stores them as separate subjects and
 //! this slice keeps the read bounded to item facts. `include_comments` is
@@ -29,7 +24,7 @@
 
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use super::keys::{bead_visible, rig_of};
 use super::{bead_excluded, rows_to_chunks, BeadRow, CommentRow, LiveBeadMetadata};
@@ -78,42 +73,82 @@ fn literal(s: &str) -> String {
     out
 }
 
-/// One SELECT per item page. Optional fields use OPTIONAL; multi-valued
-/// keywords are folded per item by [`fold_rows`], not by GROUP_CONCAT, so a
-/// label containing a separator cannot split.
-pub(super) fn items_query(after: Option<&str>, only: Option<&[String]>, limit: usize) -> String {
-    let mut q = String::from(
-        "PREFIX s: <https://schema.org/> \
-         PREFIX sd: <https://seeds.local/ontology/> \
-         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
-         SELECT ?id ?title ?description ?status ?priority ?type ?assignee ?owner \
-         ?notes ?created ?keyword WHERE { ",
-    );
-    if let Some(ids) = only {
-        q.push_str("VALUES ?id { ");
-        for id in ids {
-            q.push_str(&literal(id));
-            q.push(' ');
-        }
-        q.push_str("} ");
+const PREFIXES: &str = "PREFIX s: <https://schema.org/> \
+     PREFIX sd: <https://seeds.local/ontology/> \
+     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> ";
+
+/// Keyword rows allowed per item of a page before the read refuses.
+pub(super) const KEYWORDS_PER_ITEM: usize = 64;
+
+fn values_ids(ids: &[String]) -> String {
+    let mut q = String::from("VALUES ?id { ");
+    for id in ids {
+        q.push_str(&literal(id));
+        q.push(' ');
     }
-    q.push_str(
-        "?s s:identifier ?id ; sd:status ?status . \
-         OPTIONAL { ?s rdfs:label ?title } \
-         OPTIONAL { ?s s:description ?description } \
-         OPTIONAL { ?s sd:priority ?priority } \
-         OPTIONAL { ?s sd:issueType ?type } \
-         OPTIONAL { ?s s:agent ?assignee } \
-         OPTIONAL { ?s s:creator ?owner } \
-         OPTIONAL { ?s sd:notes ?notes } \
-         OPTIONAL { ?s s:dateCreated ?created } \
-         OPTIONAL { ?s s:keywords ?keyword } ",
-    );
-    if let Some(a) = after {
-        q.push_str(&format!("FILTER(STR(?id) > {}) ", literal(a)));
-    }
-    q.push_str(&format!("}} ORDER BY ?id LIMIT {limit}"));
+    q.push_str("} ");
     q
+}
+
+/// One SELECT per batch of known ids: exactly ONE row per item, so `LIMIT`
+/// bounds items, not a cross product of multi-valued OPTIONALs. Seeds writes each
+/// scalar fact once per item; `SAMPLE` makes that assumption explicit and
+/// `?n_*` counts let [`fold_rows`] refuse an item that breaks it. Keywords
+/// are read by [`keywords_query`], not GROUP_CONCAT, so a label containing a
+/// separator cannot split.
+pub(super) fn items_query(ids: &[String]) -> String {
+    let mut q = String::from(PREFIXES);
+    q.push_str(
+        "SELECT ?id (SAMPLE(?status_) AS ?status) (COUNT(DISTINCT ?status_) AS ?n_status) \
+         (SAMPLE(?title_) AS ?title) (COUNT(DISTINCT ?title_) AS ?n_title) \
+         (SAMPLE(?description_) AS ?description) \
+         (COUNT(DISTINCT ?description_) AS ?n_description) \
+         (SAMPLE(?priority_) AS ?priority) (SAMPLE(?type_) AS ?type) \
+         (SAMPLE(?assignee_) AS ?assignee) (SAMPLE(?owner_) AS ?owner) \
+         (SAMPLE(?notes_) AS ?notes) (COUNT(DISTINCT ?notes_) AS ?n_notes) \
+         (SAMPLE(?created_) AS ?created) WHERE { ",
+    );
+    q.push_str(&values_ids(ids));
+    q.push_str(
+        "?s s:identifier ?id ; sd:status ?status_ . \
+         OPTIONAL { ?s rdfs:label ?title_ } \
+         OPTIONAL { ?s s:description ?description_ } \
+         OPTIONAL { ?s sd:priority ?priority_ } \
+         OPTIONAL { ?s sd:issueType ?type_ } \
+         OPTIONAL { ?s s:agent ?assignee_ } \
+         OPTIONAL { ?s s:creator ?owner_ } \
+         OPTIONAL { ?s sd:notes ?notes_ } \
+         OPTIONAL { ?s s:dateCreated ?created_ } ",
+    );
+    q.push_str(&format!(
+        "}} GROUP BY ?id ORDER BY ?id LIMIT {}",
+        ids.len().max(1)
+    ));
+    q
+}
+
+/// One keyset page of item ids. Aggregating over the whole graph before
+/// `LIMIT` exceeds quipu's query timeout, so enumeration pages bare ids and
+/// [`items_query`] aggregates only that page through `VALUES`.
+pub(super) fn id_page_query(after: Option<&str>, limit: usize) -> String {
+    let filter = after
+        .map(|a| format!("FILTER(STR(?id) > {}) ", literal(a)))
+        .unwrap_or_default();
+    format!(
+        "{PREFIXES}SELECT ?id WHERE {{ ?s s:identifier ?id ; sd:status ?st . {filter}}} \
+         ORDER BY ?id LIMIT {limit}"
+    )
+}
+
+/// Keywords of exactly the page's items, bounded one row past `cap` so a
+/// full reply is detectable as "more than cap", never silently cut.
+pub(super) fn keywords_query(ids: &[String], cap: usize) -> String {
+    format!(
+        "{PREFIXES}SELECT ?id ?keyword WHERE {{ {}?s s:identifier ?id ; s:keywords ?keyword . }} \
+         ORDER BY ?id ?keyword LIMIT {}",
+        values_ids(ids),
+        cap + 1
+    )
 }
 
 /// A binding's lexical form: plain JSON scalar or Quipu's `{value, datatype}`.
@@ -150,45 +185,74 @@ pub(super) struct SeedItem {
     pub labels: Vec<String>,
 }
 
-/// Fold SPARQL rows (one per item × keyword) into items, in row order.
+/// Fold [`items_query`] rows (one per item) into items, in row order.
 ///
-/// Returns the folded items and the last id seen, which is the keyset cursor
-/// for the next page. An item's rows may straddle a page boundary when it has
-/// many keywords; the caller re-reads that id rather than trusting a partial.
-pub(super) fn fold_rows(rows: &[Value]) -> (Vec<SeedItem>, Option<String>) {
-    let mut items: Vec<SeedItem> = Vec::new();
-    let mut slot: HashMap<String, usize> = HashMap::new();
-    let mut last = None;
+/// Refuses an item whose status, title, description or notes is
+/// multi-valued: `SAMPLE` would otherwise index an arbitrary one of them.
+pub(super) fn fold_rows(rows: &[Value]) -> Result<Vec<SeedItem>> {
+    let mut items = Vec::with_capacity(rows.len());
     for row in rows {
         let Some(id) = lexical(row.get("id")) else {
             continue;
         };
-        last = Some(id.clone());
-        let i = *slot.entry(id.clone()).or_insert_with(|| {
-            items.push(SeedItem {
-                id: id.clone(),
-                title: lexical(row.get("title")).unwrap_or_default(),
-                description: lexical(row.get("description")).unwrap_or_default(),
-                status: lexical(row.get("status")).unwrap_or_default(),
-                priority: lexical(row.get("priority"))
-                    .and_then(|p| p.parse().ok())
-                    .unwrap_or(2),
-                issue_type: lexical(row.get("type")).unwrap_or_else(|| "task".into()),
-                assignee: principal(row.get("assignee")).filter(|a| !a.is_empty()),
-                owner: principal(row.get("owner")).unwrap_or_default(),
-                notes: lexical(row.get("notes")).unwrap_or_default(),
-                created_at: lexical(row.get("created")),
-                labels: Vec::new(),
-            });
-            items.len() - 1
+        for field in ["status", "title", "description", "notes"] {
+            let n = lexical(row.get(format!("n_{field}").as_str()))
+                .and_then(|n| n.parse::<u64>().ok())
+                .unwrap_or(0);
+            if n > 1 {
+                bail!("seeds item {id} has {n} {field} values; refusing to pick one");
+            }
+        }
+        let priority = match lexical(row.get("priority")) {
+            None => 2,
+            Some(p) => p.parse().unwrap_or_else(|_| {
+                tracing::warn!(item = %id, priority = %p, "unparseable seeds priority; using 2");
+                2
+            }),
+        };
+        let issue_type = lexical(row.get("type")).unwrap_or_else(|| {
+            tracing::debug!(item = %id, "seeds item has no issueType; using task");
+            "task".into()
         });
-        if let Some(k) = lexical(row.get("keyword")) {
+        items.push(SeedItem {
+            title: lexical(row.get("title")).unwrap_or_default(),
+            description: lexical(row.get("description")).unwrap_or_default(),
+            status: lexical(row.get("status")).unwrap_or_default(),
+            priority,
+            issue_type,
+            assignee: principal(row.get("assignee")).filter(|a| !a.is_empty()),
+            owner: principal(row.get("owner")).unwrap_or_default(),
+            notes: lexical(row.get("notes")).unwrap_or_default(),
+            created_at: lexical(row.get("created")),
+            labels: Vec::new(),
+            id,
+        });
+    }
+    Ok(items)
+}
+
+/// Attach [`keywords_query`] rows to their items; more than `cap` rows is
+/// an error, because the reply was cut at `cap + 1`.
+pub(super) fn attach_keywords(items: &mut [SeedItem], rows: &[Value], cap: usize) -> Result<()> {
+    if rows.len() > cap {
+        bail!("seeds keyword read exceeded {cap} rows for one page; refusing partial labels");
+    }
+    let slot: HashMap<String, usize> = items
+        .iter()
+        .enumerate()
+        .map(|(i, it)| (it.id.clone(), i))
+        .collect();
+    for row in rows {
+        let (Some(id), Some(k)) = (lexical(row.get("id")), lexical(row.get("keyword"))) else {
+            continue;
+        };
+        if let Some(&i) = slot.get(&id) {
             if !items[i].labels.contains(&k) {
                 items[i].labels.push(k);
             }
         }
     }
-    (items, last)
+    Ok(())
 }
 
 async fn post_query(base: &str, graph: &str, query: String) -> Result<Vec<Value>> {
@@ -217,8 +281,13 @@ async fn post_query(base: &str, graph: &str, query: String) -> Result<Vec<Value>
 pub(super) fn parse_query_reply(text: &str, graph: &str) -> Result<Vec<Value>> {
     let v: Value = serde_json::from_str(text)
         .with_context(|| format!("parsing seeds board reply for {graph}"))?;
-    if v.get("truncated").and_then(Value::as_bool) == Some(true) {
-        bail!("seeds board query for {graph} was truncated; refusing a partial board");
+    // Only an explicit `truncated: false` proves completeness; a missing
+    // field is as unproven as `true` (same rule as quipu's share builder).
+    if v.get("truncated").and_then(Value::as_bool) != Some(false) {
+        bail!(
+            "seeds board query for {graph} did not report truncated=false; \
+             refusing a possibly partial board"
+        );
     }
     match v.get("rows").and_then(Value::as_array) {
         Some(rows) => Ok(rows.clone()),
@@ -235,26 +304,35 @@ async fn read_items(
     let base = base_url(config)?;
     let page = config.seeds.page_size.max(1);
     let mut out: Vec<SeedItem> = Vec::new();
+    if let Some(ids) = ids {
+        for batch in ids.chunks(page) {
+            out.extend(read_batch(base, graph, batch).await?);
+        }
+        return Ok(out);
+    }
     let mut after: Option<String> = None;
     loop {
-        let rows = post_query(base, graph, items_query(after.as_deref(), ids, page)).await?;
-        let full = rows.len() >= page;
-        let (mut items, last) = fold_rows(&rows);
-        if full && items.len() > 1 {
-            // The last item may be cut mid-keywords; re-read it next page.
-            items.pop();
-            after = items.last().map(|i| i.id.clone());
-        } else if full {
-            bail!(
-                "seeds item {} in {graph} has more keyword rows than seeds.page_size={page}",
-                last.unwrap_or_default()
-            );
+        let rows = post_query(base, graph, id_page_query(after.as_deref(), page)).await?;
+        let batch: Vec<String> = rows.iter().filter_map(|r| lexical(r.get("id"))).collect();
+        if !batch.is_empty() {
+            out.extend(read_batch(base, graph, &batch).await?);
         }
-        out.extend(items);
-        if !full {
+        if rows.len() < page || batch.is_empty() {
             return Ok(out);
         }
+        after = batch.last().cloned();
     }
+}
+
+/// Item facts plus keywords for one batch of ids (at most `page_size`).
+async fn read_batch(base: &str, graph: &str, ids: &[String]) -> Result<Vec<SeedItem>> {
+    let mut items = fold_rows(&post_query(base, graph, items_query(ids)).await?)?;
+    if !items.is_empty() {
+        let cap = items.len().saturating_mul(KEYWORDS_PER_ITEM);
+        let kw = post_query(base, graph, keywords_query(ids, cap)).await?;
+        attach_keywords(&mut items, &kw, cap)?;
+    }
+    Ok(items)
 }
 
 /// Fetch one rig's beads from its live seeds graph, optionally one id.
@@ -343,82 +421,9 @@ pub(super) async fn fetch_bead_metadata(
     Ok(out)
 }
 
-/// One bounded page of the board's change feed, reduced to touched item ids.
-#[derive(Debug, PartialEq)]
-pub struct ChangesPage {
-    /// Item ids whose facts changed in this page (deduplicated, sorted).
-    pub item_ids: BTreeSet<String>,
-    /// Cursor for the next page (`since` of the following call).
-    pub next_tx: i64,
-    /// Latest committed tx Quipu reported for the feed.
-    pub watermark_tx: i64,
-}
-
-/// Reduce a `/changes` reply to item ids and cursors. A reply without
-/// `records`/`next_tx` is an error, never "no changes".
-pub fn parse_changes(text: &str) -> Result<ChangesPage> {
-    let v: Value = serde_json::from_str(text).context("parsing seeds change feed page")?;
-    let records = v
-        .get("records")
-        .and_then(Value::as_array)
-        .context("seeds change feed page has no records field")?;
-    let next_tx = v
-        .get("next_tx")
-        .and_then(Value::as_i64)
-        .context("seeds change feed page has no next_tx")?;
-    let watermark_tx = v
-        .get("watermark_tx")
-        .and_then(Value::as_i64)
-        .unwrap_or(next_tx);
-    let item_ids = records
-        .iter()
-        .filter_map(|r| r.get("entity").and_then(Value::as_str))
-        .filter_map(|e| e.strip_prefix(ITEM_PREFIX))
-        // Comment/sub-resource subjects hang off the item IRI; map to the item.
-        .map(|rest| rest.split(['/', '#']).next().unwrap_or(rest).to_string())
-        .filter(|id| !id.is_empty())
-        .collect();
-    Ok(ChangesPage {
-        item_ids,
-        next_tx,
-        watermark_tx,
-    })
-}
-
-/// Pull one page of the board's change feed after `since`.
-pub async fn changes_page(
-    config: &BeadsConfig,
-    db_name: &str,
-    since: i64,
-    limit: usize,
-) -> Result<ChangesPage> {
-    let base = base_url(config)?;
-    let graph = graph_for(config, db_name);
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .context("building HTTP client for seeds change feed")?;
-    let resp = client
-        .get(format!("{base}/changes"))
-        .query(&[
-            ("since", since.to_string()),
-            ("limit", limit.max(1).to_string()),
-            ("capture", "new_values".to_string()),
-            ("graph", graph.clone()),
-        ])
-        .send()
-        .await
-        .with_context(|| format!("GET /changes for seeds graph {graph}"))?;
-    let status = resp.status();
-    let text = resp.text().await.unwrap_or_default();
-    if !status.is_success() {
-        bail!(
-            "seeds change feed for {graph} returned HTTP {status}: {}",
-            text.chars().take(300).collect::<String>()
-        );
-    }
-    parse_changes(&text)
-}
+#[path = "seeds_feed.rs"]
+mod feed;
+pub use feed::{changes_page, parse_changes, ChangesPage};
 
 #[cfg(test)]
 #[path = "seeds_tests.rs"]
