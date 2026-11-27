@@ -616,21 +616,10 @@ impl HooksConfig {
     }
 }
 
-/// Which store bead content is read from.
-///
-/// `Dolt` is the original MySQL-protocol backend. `Jsonl` reads the br store's
-/// exported `issues.jsonl`, which is what the crew store became at the clbx2
-/// cutover (2026-08-29) — see aegis-205llh, where bobbin was found still
-/// answering bead search out of the frozen Dolt snapshot.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum BeadsSource {
-    /// Dolt / MySQL protocol (`host`, `port`, `user`, `databases`).
-    #[default]
-    Dolt,
-    /// br JSONL export, one path per configured database (`jsonl_paths`).
-    Jsonl,
-}
+// Bead source selection, split out under the file-size ratchet.
+#[path = "config_beads.rs"]
+mod beads_source;
+pub use beads_source::{BeadsSource, SeedsBoard};
 
 /// Configuration for beads (issue tracker) integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -658,6 +647,8 @@ pub struct BeadsConfig {
     /// path is an error rather than an empty rig, because "indexed zero beads"
     /// and "this rig is not configured" are indistinguishable downstream.
     pub jsonl_paths: std::collections::BTreeMap<String, String>,
+    /// For `source = "seeds"`: the live board's Quipu server and graphs.
+    pub seeds: SeedsBoard,
     /// Include comments in indexed content
     pub include_comments: bool,
     /// Include closed beads
@@ -680,6 +671,7 @@ impl Default for BeadsConfig {
             user: "root".into(),
             databases: vec![],
             jsonl_paths: std::collections::BTreeMap::new(),
+            seeds: SeedsBoard::default(),
             include_comments: true,
             include_closed: false,
             max_age_days: 90,
