@@ -7,4 +7,3 @@ ok
 test storage::lance::tests::read_path_writer_guard_fails_closed_for_missing_or_unsafe_paths ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1311 filtered out; finished in 0.04s
-

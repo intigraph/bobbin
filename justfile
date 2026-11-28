@@ -221,3 +221,15 @@ prime action="test":
         test) cargo test --locked --features knowledge --bin bobbin cli::prime:: && cargo test --locked --features knowledge --test cli_prime --test prime_sync ;;
         *) echo 'Use: just prime check|check-default|lint|fmt|format|size|ratchet|test' >&2; exit 2 ;;
     esac
+
+# Pure native document projection and receipt tests; no full index/model/store.
+test-snapshot-batches:
+    cargo test --manifest-path tools/snapshot-batch-lab/Cargo.toml
+
+# Build the streaming planner. This does not enable a publishing path.
+build-snapshot-batch-lab:
+    cargo build --manifest-path tools/snapshot-batch-lab/Cargo.toml
+
+# New disposable store only. The harness has no remote endpoint option.
+snapshot-batch-lab server planner shapes output:
+    systemd-run --user --scope -p MemoryHigh=2560M -p MemoryMax=3G -p MemorySwapMax=0 -p CPUQuota=150% python3 scripts/snapshot-batch-lab.py --server {{quote(server)}} --planner {{quote(planner)}} --shapes {{quote(shapes)}} --output {{quote(output)}}

@@ -6,7 +6,7 @@
 
 use super::*;
 use crate::iri::{chunk_iri, symbol_iri};
-use crate::types::ChunkType;
+use crate::types::{Chunk, ChunkEdge, ChunkEdgeType, ChunkType};
 
 fn chunk(id: &str, file: &str, t: ChunkType, name: Option<&str>, start: u32) -> Chunk {
     Chunk {
