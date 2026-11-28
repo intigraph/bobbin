@@ -76,3 +76,61 @@ fn codex_config_round_trips_through_toml() {
     assert_eq!(back["mcp_servers"]["x"]["command"], "x");
     assert!(dir.path().join("config.toml.bak-bobbin").exists());
 }
+
+/// The UserPromptSubmit evidence must find metrics under the shanty root the
+/// deployment names, not only the `~/gt/*/crew/*` layout (aegis-9uq.3: on a
+/// Mac the live file is `~/workspace/.shanty/.bobbin/metrics.jsonl`).
+#[test]
+fn prompt_evidence_resolves_metrics_from_the_shanty_root() {
+    let b = bundle();
+    let cmd = b["hooks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["event"] == "UserPromptSubmit")
+        .and_then(|h| h["evidence"]["command"].as_str())
+        .expect("UserPromptSubmit evidence")
+        .to_string();
+    if std::process::Command::new("python3")
+        .arg("-V")
+        .output()
+        .is_err()
+    {
+        return; // evidence is a python3 one-liner; nothing to exercise here
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let home = tmp.path().join("home");
+    let root = home.join("workspace/.shanty");
+    std::fs::create_dir_all(root.join(".bobbin")).unwrap();
+    std::fs::write(
+        root.join(".bobbin/metrics.jsonl"),
+        "{\"event_type\":\"hook_injection\",\"timestamp\":\"2026-11-27T10:00:00Z\"}\n",
+    )
+    .unwrap();
+    let cfg = tmp.path().join("cfg");
+    std::fs::create_dir_all(cfg.join("shantytown")).unwrap();
+    std::fs::write(cfg.join("shantytown/root"), format!("{}\n", root.display())).unwrap();
+    let run = |cfg_home: &std::path::Path, shanty_root: Option<&std::path::Path>| {
+        let mut c = std::process::Command::new("sh");
+        c.arg("-c")
+            .arg(&cmd)
+            .current_dir(tmp.path())
+            .env("HOME", &home)
+            .env("XDG_CONFIG_HOME", cfg_home)
+            .env_remove("SHANTY_ROOT");
+        if let Some(r) = shanty_root {
+            c.env("SHANTY_ROOT", r);
+        }
+        c.output().unwrap()
+    };
+    let missing = tmp.path().join("no-config");
+    for out in [run(&cfg, None), run(&missing, Some(&root))] {
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "1795773600");
+    }
+    assert!(!run(&missing, None).status.success());
+}
