@@ -21,6 +21,13 @@ until release-please cuts the section.
 
 [#62]: https://github.com/scbrown/bobbin/issues/62
 
+## [0.38.1](https://github.com/intigraph/bobbin/compare/v0.38.0...v0.38.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* **hooks:** resolve prompt-hook evidence metrics from the shanty root (aegis-9uq.3) ([#259](https://github.com/intigraph/bobbin/issues/259)) ([8c4047b](https://github.com/intigraph/bobbin/commit/8c4047b575920452962a1e78b6fc9017b154b54e))
+
 ## [0.38.0](https://github.com/intigraph/bobbin/compare/v0.37.3...v0.38.0) (2026-11-27)
 
 
